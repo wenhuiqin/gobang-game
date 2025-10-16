@@ -1,10 +1,17 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards } from '@nestjs/common';
 import { AIService } from '../ai/ai.service';
+import { GameService } from './game.service';
 import { PieceColor } from '@/common/constants/game.constants';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { CurrentUser } from '@/common/decorators/user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 
 @Controller('game')
 export class GameController {
-  constructor(private readonly aiService: AIService) {}
+  constructor(
+    private readonly aiService: AIService,
+    private readonly gameService: GameService,
+  ) {}
 
   /**
    * AI落子（用于人机对战）
@@ -81,6 +88,47 @@ export class GameController {
       return {
         code: 500,
         message: 'AI计算失败',
+      };
+    }
+  }
+
+  /**
+   * 记录人机对战结果
+   */
+  @Post('ai-game-result')
+  @Public()
+  async recordAIGameResult(
+    @Body() body: { 
+      userId: string; 
+      playerWon: boolean; 
+      difficulty: number;
+      playerColor: number;
+      totalSteps: number;
+    },
+  ) {
+    try {
+      const { userId, playerWon, difficulty, playerColor, totalSteps } = body;
+      
+      console.log('📊 记录人机对战结果:', { userId, playerWon, difficulty, playerColor, totalSteps });
+      
+      // 记录游戏并更新用户统计
+      await this.gameService.recordAIGame(
+        parseInt(userId),
+        playerWon,
+        difficulty,
+        playerColor,
+        totalSteps
+      );
+      
+      return {
+        code: 0,
+        message: '记录成功',
+      };
+    } catch (error) {
+      console.error('记录游戏结果失败:', error);
+      return {
+        code: 500,
+        message: '记录失败',
       };
     }
   }

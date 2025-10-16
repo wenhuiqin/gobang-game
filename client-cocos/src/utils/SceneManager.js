@@ -122,7 +122,10 @@ class SceneManager {
   /**
    * 显示主菜单
    */
-  showMenu() {
+  async showMenu() {
+    // 刷新用户信息以获取最新战绩
+    await this.refreshUserInfo();
+    
     this.destroyCurrentScene();
     
     this.currentScene = new MenuScene(
@@ -135,6 +138,24 @@ class SceneManager {
         }
       }
     );
+  }
+
+  /**
+   * 刷新用户信息
+   */
+  async refreshUserInfo() {
+    try {
+      const response = await HttpClient.get('/user/profile');
+      if (response.code === 0 && response.data) {
+        this.userInfo = response.data;
+        wx.setStorageSync('userInfo', this.userInfo);
+        console.log('✅ 用户信息已刷新:', this.userInfo);
+      }
+    } catch (error) {
+      console.error('❌ 刷新用户信息失败:', error);
+      // 使用缓存的用户信息
+      this.userInfo = wx.getStorageSync('userInfo') || this.userInfo;
+    }
   }
 
   /**

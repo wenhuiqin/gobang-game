@@ -270,5 +270,63 @@ export class GameService {
 
     return JSON.parse(data);
   }
+
+  /**
+   * 记录人机对战结果
+   */
+  async recordAIGame(
+    userId: number,
+    playerWon: boolean,
+    difficulty: number,
+    playerColor: number,
+    totalSteps: number,
+  ): Promise<void> {
+    const roomId = `ai-${userId}-${Date.now()}`;
+    const startedAt = new Date(Date.now() - totalSteps * 1000); // 估算开始时间
+    const endedAt = new Date();
+    
+    // 确定黑白双方
+    const isPlayerBlack = playerColor === PieceColor.BLACK;
+    const blackPlayerId = isPlayerBlack ? String(userId) : null;
+    const whitePlayerId = isPlayerBlack ? null : String(userId);
+    
+    // 确定获胜者
+    const winnerId = playerWon ? String(userId) : null;
+    
+    // 确定游戏结果
+    let gameResult: GameResult;
+    if (playerWon) {
+      gameResult = isPlayerBlack ? GameResult.BLACK_WIN : GameResult.WHITE_WIN;
+    } else {
+      gameResult = isPlayerBlack ? GameResult.WHITE_WIN : GameResult.BLACK_WIN;
+    }
+    
+    // 保存游戏记录
+    const gameRecord = this.gameRecordRepository.create({
+      roomId,
+      gameType: GameType.AI_GAME,
+      blackPlayerId,
+      whitePlayerId,
+      winnerId,
+      gameResult,
+      totalSteps,
+      duration: Math.floor((endedAt.getTime() - startedAt.getTime()) / 1000),
+      gameData: null,
+      aiDifficulty: difficulty as AIDifficulty,
+      startedAt,
+      endedAt,
+    });
+
+    await this.gameRecordRepository.save(gameRecord);
+
+    // 更新用户统计数据（不更新rating）
+    await this.userService.updateGameStats(
+      String(userId),
+      playerWon ? 'win' : 'lose',
+      0, // 不再更新rating
+    );
+    
+    console.log(`✅ 人机对战结果已记录: 用户${userId} ${playerWon ? '胜利' : '失败'}`);
+  }
 }
 

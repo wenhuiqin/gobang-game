@@ -167,6 +167,13 @@ class GameScene {
     // 检查胜利
     if (this.checkWin(x, y)) {
       this.isAIThinking = false; // 重置AI思考状态
+      
+      // 如果是人机对战，记录结果
+      if (this.config.mode === 'ai') {
+        const playerWon = this.currentPlayer === this.playerColor;
+        this.recordGameResult(playerWon);
+      }
+      
       setTimeout(() => {
         wx.showModal({
           title: '🎉 游戏结束',
@@ -292,6 +299,10 @@ class GameScene {
         // 检查AI是否获胜
         if (this.checkWin(x, y)) {
           this.isAIThinking = false;
+          
+          // 记录游戏结果（AI获胜，玩家失败）
+          this.recordGameResult(false);
+          
           const aiColorIcon = this.aiColor === Config.PIECE.BLACK ? '⚫' : '⚪';
           const aiColorText = this.aiColor === Config.PIECE.BLACK ? '黑方' : '白方';
           setTimeout(() => {
@@ -685,6 +696,47 @@ class GameScene {
     this.currentPlayer = Config.PIECE.BLACK;
     this.lastMove = null;
     this.isAIThinking = false;
+  }
+
+  /**
+   * 记录游戏结果到后端
+   */
+  recordGameResult(playerWon) {
+    const HttpClient = require('../api/HttpClient.js');
+    const userInfo = wx.getStorageSync('userInfo');
+    
+    if (!userInfo || !userInfo.id) {
+      console.warn('⚠️ 未登录，无法记录游戏结果');
+      return;
+    }
+
+    // 计算总步数
+    let totalSteps = 0;
+    for (let i = 0; i < Config.BOARD_SIZE; i++) {
+      for (let j = 0; j < Config.BOARD_SIZE; j++) {
+        if (this.board[i][j] !== Config.PIECE.EMPTY) {
+          totalSteps++;
+        }
+      }
+    }
+
+    const data = {
+      userId: userInfo.id,
+      playerWon: playerWon,
+      difficulty: this.difficulty,
+      playerColor: this.playerColor,
+      totalSteps: totalSteps
+    };
+
+    console.log('📊 准备记录游戏结果:', data);
+
+    HttpClient.post('/game/ai-game-result', data)
+      .then(response => {
+        console.log('✅ 游戏结果记录成功:', response);
+      })
+      .catch(error => {
+        console.error('❌ 游戏结果记录失败:', error);
+      });
   }
 }
 
