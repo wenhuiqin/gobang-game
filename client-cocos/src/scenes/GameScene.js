@@ -241,7 +241,7 @@ class GameScene {
       console.log('🔍 AI完整响应:', JSON.stringify(response));
       console.log('🔍 response.code:', response.code);
       console.log('🔍 response.data:', response.data);
-      console.log('🔍 response.data.position:', response.data?.position);
+      console.log('🔍 response.data.position:', response.data && response.data.position);
       
       if (response.code === 0 && response.data && response.data.position) {
         const { x, y } = response.data.position;
