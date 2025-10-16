@@ -63,7 +63,26 @@ jobs:
           echo "📦 1. 部署后端服务"
           echo "=========================================="
           cd /root/gobang
+          
+          # 检查必要文件是否存在
+          if [ ! -f "./dist/main.js" ]; then
+            echo "❌ 错误: dist/main.js 不存在，后端编译可能失败"
+            exit 1
+          fi
+          
+          if [ ! -f "./.env" ]; then
+            echo "❌ 错误: .env 文件不存在"
+            exit 1
+          fi
+          
+          # 安装生产依赖
+          echo "📦 安装后端依赖..."
           npm install --production
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ 后端依赖安装失败"
+            exit 1
+          fi
           
           # 创建PM2配置文件
           cat > ecosystem.config.js << 'EOF'
@@ -75,7 +94,7 @@ jobs:
               exec_mode: 'cluster',
               env: {
                 NODE_ENV: 'production',
-                PORT: 3000
+                PORT: 3002
               },
               error_file: './logs/err.log',
               out_file: './logs/out.log',
@@ -91,9 +110,29 @@ jobs:
           mkdir -p logs
           
           # 重启PM2服务
+          echo "🔄 重启PM2服务..."
           pm2 delete gobang-server 2>/dev/null || true
           pm2 start ecosystem.config.js
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ PM2启动失败"
+            pm2 logs gobang-server --lines 50
+            exit 1
+          fi
+          
           pm2 save
+          
+          # 等待服务启动
+          echo "⏳ 等待服务启动..."
+          sleep 3
+          
+          # 检查服务状态
+          pm2 list | grep gobang-server | grep online
+          if [ $? -ne 0 ]; then
+            echo "❌ 服务启动失败，查看日志:"
+            pm2 logs gobang-server --lines 50
+            exit 1
+          fi
           
           echo "✅ 后端部署完成！"
           pm2 status
