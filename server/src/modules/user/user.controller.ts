@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { CurrentUser } from '@/common/decorators/user.decorator';
+import { Public } from '@/common/decorators/public.decorator';
 import { UserService } from './user.service';
 
 @Controller('user')
@@ -29,9 +30,10 @@ export class UserController {
   }
 
   /**
-   * 获取排行榜
+   * 获取排行榜（公开接口）
    */
   @Get('leaderboard')
+  @Public()
   async getLeaderboard(@Query('limit') limit?: string) {
     // Query参数是字符串，需要转换为数字
     const limitNum = limit ? parseInt(limit, 10) : 50;
