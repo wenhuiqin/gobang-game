@@ -250,7 +250,7 @@ class GameScene {
           if (retryCount < MAX_RETRIES) {
             console.log(`🔄 AI位置冲突，准备重试...`);
             wx.showToast({
-              title: `AI重新思考中...`,
+              title: `电脑重新思考中...`,
               icon: 'loading',
               duration: 1000
             });
@@ -262,7 +262,7 @@ class GameScene {
           } else {
             console.error(`❌ AI重试${MAX_RETRIES}次后仍然失败`);
             wx.showToast({
-              title: 'AI出错，请重新开始',
+              title: '电脑出错，请重新开始',
               icon: 'none',
             });
             this.currentPlayer = this.playerColor;
@@ -297,7 +297,7 @@ class GameScene {
           setTimeout(() => {
             wx.showModal({
               title: '🎉 游戏结束',
-              content: `${aiColorIcon} AI(${aiColorText})获胜！`,
+              content: `${aiColorIcon} 电脑(${aiColorText})获胜！`,
               showCancel: true,
               cancelText: '查看棋局',
               confirmText: '再来一局',
@@ -326,7 +326,7 @@ class GameScene {
       if (retryCount < MAX_RETRIES) {
         console.log(`🔄 准备重试AI请求...`);
         wx.showToast({
-          title: `AI重新思考中 (${retryCount + 1}/${MAX_RETRIES})`,
+          title: `电脑重新思考中 (${retryCount + 1}/${MAX_RETRIES})`,
           icon: 'loading',
           duration: 1500
         });
@@ -339,8 +339,8 @@ class GameScene {
         // 重试次数用尽
         console.error(`❌ AI重试${MAX_RETRIES}次后仍然失败，放弃`);
         wx.showModal({
-          title: 'AI出错',
-          content: `AI连续${MAX_RETRIES}次失败，可能是网络问题或服务器繁忙。是否重新开始游戏？`,
+          title: '电脑出错',
+          content: `电脑连续${MAX_RETRIES}次失败，可能是网络问题或服务器繁忙。是否重新开始游戏？`,
           confirmText: '重新开始',
           cancelText: '继续游戏',
           success: (res) => {

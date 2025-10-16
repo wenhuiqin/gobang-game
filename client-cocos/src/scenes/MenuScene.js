@@ -18,7 +18,7 @@ class MenuScene {
     
     // 菜单选项
     this.menuItems = [
-      { id: 'ai', name: '🤖 人机对战', desc: '与智能AI切磋' },
+      { id: 'ai', name: '🤖 人机对战', desc: '与电脑切磋' },
       { id: 'random', name: '🎲 随机匹配', desc: '寻找在线对手' },
       { id: 'friend', name: '👥 好友对战', desc: '邀请好友一起玩' },
       { id: 'rank', name: '🏆 排行榜', desc: '查看高手榜单' },
@@ -73,7 +73,7 @@ class MenuScene {
     if (mode === 'ai') {
       // 先选择颜色
       wx.showActionSheet({
-        itemList: ['⚫ 执黑先手（我先下）', '⚪ 执白后手（AI先下）'],
+        itemList: ['⚫ 执黑先手（我先下）', '⚪ 执白后手（电脑先下）'],
         success: (res) => {
           const playerColor = res.tapIndex === 0 ? 'black' : 'white'; // black or white
           // 再选择难度
