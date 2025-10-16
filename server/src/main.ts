@@ -22,6 +22,9 @@ async function bootstrap() {
   // 全局响应拦截器
   app.useGlobalInterceptors(new TransformInterceptor());
 
+  // 设置全局API前缀
+  app.setGlobalPrefix('api');
+
   // CORS配置
   app.enableCors();
 
