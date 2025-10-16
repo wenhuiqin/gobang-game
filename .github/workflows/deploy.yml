@@ -26,29 +26,8 @@ jobs:
         npm install
         npm run build
     
-    - name: 上传微信小游戏
-      run: |
-        cd client-cocos
-        npm install
-        
-        # 创建临时私钥文件
-        echo "${{ secrets.WECHAT_UPLOAD_KEY }}" > private.key
-        
-        # 设置版本号（使用commit的短hash）
-        export VERSION="1.0.${GITHUB_RUN_NUMBER}"
-        export DESC="GitHub Actions 自动构建 - commit: ${GITHUB_SHA::7}"
-        
-        # 执行上传
-        npm run upload
-        
-        # 清理私钥文件
-        rm -f private.key
-      env:
-        VERSION: 1.0.${{ github.run_number }}
-        DESC: "自动构建 #${{ github.run_number }}"
-    
-    - name: 部署到服务器
-      uses: appleboy/scp-action@master
+    - name: 部署后端到服务器
+      uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USERNAME }}
@@ -57,15 +36,32 @@ jobs:
         source: "server/dist,server/package.json,server/package-lock.json,server/.env,server/database"
         target: "/root/gobang"
         strip_components: 1
+        timeout: 10m
     
-    - name: 重启服务
-      uses: appleboy/ssh-action@master
+    - name: 部署前端到服务器
+      uses: appleboy/scp-action@v0.1.7
       with:
         host: ${{ secrets.SERVER_HOST }}
         username: ${{ secrets.SERVER_USERNAME }}
         password: ${{ secrets.SERVER_PASSWORD }}
         port: 22
+        source: "client-cocos"
+        target: "/root/gobang-deploy"
+        timeout: 10m
+    
+    - name: 重启后端服务并上传小游戏
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: 22
+        timeout: 10m
+        command_timeout: 10m
         script: |
+          echo "=========================================="
+          echo "📦 1. 部署后端服务"
+          echo "=========================================="
           cd /root/gobang
           npm install --production
           
@@ -99,6 +95,41 @@ jobs:
           pm2 start ecosystem.config.js
           pm2 save
           
-          echo "✅ 部署完成！"
+          echo "✅ 后端部署完成！"
           pm2 status
+          
+          echo ""
+          echo "=========================================="
+          echo "🎮 2. 上传微信小游戏"
+          echo "=========================================="
+          
+          # 进入前端目录
+          cd /root/gobang-deploy/client-cocos
+          
+          # 安装依赖
+          echo "📦 安装依赖..."
+          npm install
+          
+          # 创建密钥文件
+          echo "🔑 配置上传密钥..."
+          echo "${{ secrets.WECHAT_UPLOAD_KEY }}" > private.key
+          
+          # 设置环境变量
+          export VERSION="1.0.${{ github.run_number }}"
+          export DESC="自动构建 #${{ github.run_number }} - commit: ${{ github.sha }}"
+          
+          # 执行上传
+          echo "🚀 开始上传..."
+          npm run upload
+          
+          # 清理
+          echo "🧹 清理临时文件..."
+          rm -f private.key
+          cd /root
+          rm -rf /root/gobang-deploy
+          
+          echo ""
+          echo "=========================================="
+          echo "✅ 全部完成！"
+          echo "=========================================="
 
