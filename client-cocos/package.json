@@ -1,0 +1,12 @@
+{
+  "name": "gobang-wechat-game",
+  "version": "1.0.0",
+  "description": "五子棋微信小游戏",
+  "scripts": {
+    "upload": "node scripts/upload.js"
+  },
+  "devDependencies": {
+    "miniprogram-ci": "^1.10.0"
+  }
+}
+

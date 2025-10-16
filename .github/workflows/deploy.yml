@@ -20,11 +20,32 @@ jobs:
       with:
         node-version: '16'
     
-    - name: 安装依赖并编译
+    - name: 编译后端
       run: |
         cd server
         npm install
         npm run build
+    
+    - name: 上传微信小游戏
+      run: |
+        cd client-cocos
+        npm install
+        
+        # 创建临时私钥文件
+        echo "${{ secrets.WECHAT_UPLOAD_KEY }}" > private.key
+        
+        # 设置版本号（使用commit的短hash）
+        export VERSION="1.0.${GITHUB_RUN_NUMBER}"
+        export DESC="GitHub Actions 自动构建 - commit: ${GITHUB_SHA::7}"
+        
+        # 执行上传
+        npm run upload
+        
+        # 清理私钥文件
+        rm -f private.key
+      env:
+        VERSION: 1.0.${{ github.run_number }}
+        DESC: "自动构建 #${{ github.run_number }}"
     
     - name: 部署到服务器
       uses: appleboy/scp-action@master

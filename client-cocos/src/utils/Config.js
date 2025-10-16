@@ -8,8 +8,8 @@ module.exports = {
   WECHAT_APP_ID: 'wx4379feb1257bd826',
   
   // 服务器配置
-  API_BASE_URL: 'http://101.201.253.77:3000',
-  WS_BASE_URL: 'ws://101.201.253.77:3001/game',
+  API_BASE_URL: 'https://gobang.ai-image-tools.top',
+  WS_BASE_URL: 'wss://gobang.ai-image-tools.top/game',
   
   // 游戏配置
   BOARD_SIZE: 15,           // 棋盘大小
