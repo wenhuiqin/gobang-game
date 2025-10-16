@@ -2,7 +2,7 @@ import { Controller, Post, Body } from '@nestjs/common';
 import { AIService } from '../ai/ai.service';
 import { PieceColor } from '@/common/constants/game.constants';
 
-@Controller('api/game')
+@Controller('game')
 export class GameController {
   constructor(private readonly aiService: AIService) {}
 

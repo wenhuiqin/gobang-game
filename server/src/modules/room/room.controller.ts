@@ -4,7 +4,7 @@ import { CurrentUser } from '@/common/decorators/user.decorator';
 import { RoomService } from './room.service';
 import { UserService } from '@/modules/user/user.service';
 
-@Controller('api/room')
+@Controller('room')
 @UseGuards(JwtAuthGuard)
 export class RoomController {
   constructor(
