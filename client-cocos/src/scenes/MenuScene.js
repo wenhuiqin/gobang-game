@@ -143,25 +143,18 @@ class MenuScene {
     SocketClient.off('matchError');
     SocketClient.off('matchCancelled');
     
-    let matchCancelled = false;
-    let matchFound = false;
-    let timeoutTimer = null;
+    // 使用对象包装状态，以便在回调中修改
+    const matchState = {
+      cancelled: false,
+      found: false
+    };
     
     // 监听匹配成功
     const onMatchFound = (data) => {
-      if (matchCancelled || matchFound) return;
+      if (matchState.cancelled || matchState.found) return;
       
-      matchFound = true;
+      matchState.found = true;
       console.log('✅ 匹配成功:', data);
-      
-      // 清除定时器
-      if (timeoutTimer) {
-        clearTimeout(timeoutTimer);
-        timeoutTimer = null;
-      }
-      
-      // 先隐藏loading
-      wx.hideLoading();
       
       const { roomId, opponent, yourColor } = data;
       
@@ -183,48 +176,21 @@ class MenuScene {
     const onMatchJoined = (data) => {
       console.log('✅ 已加入匹配队列:', data);
       
-      // 显示匹配中状态
-      wx.showLoading({ 
-        title: '正在匹配...', 
-        mask: true 
-      });
-      
-      // 10秒后如果还没匹配到，显示取消按钮
-      timeoutTimer = setTimeout(() => {
-        if (!matchCancelled && !matchFound && SocketClient.connected) {
-          wx.hideLoading();
-          wx.showModal({
-            title: '正在匹配',
-            content: '正在为你寻找对手...\n等待时间较长，是否继续？',
-            confirmText: '继续等待',
-            cancelText: '取消匹配',
-            success: (res) => {
-              if (!res.confirm) {
-                matchCancelled = true;
-                SocketClient.cancelMatch();
-                wx.showToast({ title: '已取消匹配', icon: 'none' });
-              } else {
-                wx.showLoading({ title: '正在匹配...', mask: true });
-              }
-            }
-          });
-        }
-      }, 10000);
+      // 立即显示可取消的匹配对话框
+      this.showMatchModal(SocketClient, matchState);
     };
     
     // 监听错误
     const onMatchError = (data) => {
-      if (matchCancelled) return;
+      if (matchState.cancelled) return;
       
       console.error('❌ 匹配错误:', data);
-      wx.hideLoading();
       wx.showToast({ title: data.message, icon: 'none' });
     };
     
     // 监听取消成功
     const onMatchCancelled = (data) => {
       console.log('✅ 取消匹配成功:', data);
-      wx.hideLoading();
     };
     
     SocketClient.on('matchFound', onMatchFound);
@@ -234,6 +200,33 @@ class MenuScene {
     
     // 发起匹配请求
     SocketClient.joinMatch(this.userInfo.rating || 1000);
+  }
+  
+  // 显示匹配对话框（递归调用，直到匹配成功或取消）
+  showMatchModal(SocketClient, matchState) {
+    // 检查是否已经匹配成功或取消
+    if (matchState.cancelled || matchState.found) {
+      return;
+    }
+    
+    wx.showModal({
+      title: '正在匹配',
+      content: '正在为你寻找对手...\n请稍候',
+      showCancel: true,
+      cancelText: '取消匹配',
+      confirmText: '继续等待',
+      success: (res) => {
+        if (!res.confirm) {
+          // 用户点击取消匹配
+          matchState.cancelled = true;
+          SocketClient.cancelMatch();
+          wx.showToast({ title: '已取消匹配', icon: 'none' });
+        } else if (!matchState.found && !matchState.cancelled) {
+          // 用户点击继续等待，递归显示对话框
+          this.showMatchModal(SocketClient, matchState);
+        }
+      }
+    });
   }
   
   showFriendOptions() {
