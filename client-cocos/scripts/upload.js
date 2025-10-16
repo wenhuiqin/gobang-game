@@ -53,23 +53,46 @@ const project = new ci.Project({
 
 // 创建上传超时控制
 const uploadTimeout = 15 * 60 * 1000; // 15分钟超时
+
+console.log('📝 开始编译和上传...');
+
+// 记录最后一次进度更新时间，用于检测卡死
+let lastProgressTime = Date.now();
+let progressCheckInterval = setInterval(() => {
+  const timeSinceLastProgress = Date.now() - lastProgressTime;
+  if (timeSinceLastProgress > 60000) { // 60秒没有进度更新
+    console.log(`⏳ 已等待 ${Math.floor(timeSinceLastProgress / 1000)} 秒，仍在处理中...`);
+  }
+}, 10000); // 每10秒检查一次
+
 const uploadPromise = ci.upload({
   project,
   version: version,
   desc: desc,
   setting: {
-    es6: true,
-    es7: true,
-    minify: true,
-    minifyJS: true,
-    minifyWXML: true,
-    minifyWXSS: true,
-    autoPrefixWXSS: true,
+    es6: false, // 关闭ES6转ES5，加快编译速度
+    es7: false, // 关闭ES7转ES5
+    minify: false, // 关闭代码压缩，加快编译速度（可在微信后台配置）
+    minifyJS: false,
+    minifyWXML: false,
+    minifyWXSS: false,
+    autoPrefixWXSS: false,
   },
   onProgressUpdate: (task) => {
+    lastProgressTime = Date.now(); // 更新最后进度时间
+    
     // 改进进度显示
     if (task) {
-      console.log(`📤 上传进度:`, JSON.stringify(task).substring(0, 100));
+      const taskStr = JSON.stringify(task);
+      console.log(`📤 上传进度:`, taskStr.length > 150 ? taskStr.substring(0, 150) + '...' : taskStr);
+      
+      // 特别标记关键阶段
+      if (task.message && task.message.includes('upload')) {
+        console.log('🚀 正在上传文件到微信服务器...');
+      }
+      if (task.status === 'done' && task.message && task.message.includes('success')) {
+        console.log('✨ 编译完成，准备上传...');
+      }
     }
   },
 });
@@ -82,6 +105,7 @@ const timeoutPromise = new Promise((_, reject) => {
 
 Promise.race([uploadPromise, timeoutPromise])
   .then((result) => {
+    clearInterval(progressCheckInterval); // 清除进度检查
     console.log('✅ 上传成功！');
     console.log('📦 上传结果:', JSON.stringify(result, null, 2));
     console.log('');
@@ -90,7 +114,11 @@ Promise.race([uploadPromise, timeoutPromise])
     process.exit(0);
   })
   .catch((error) => {
+    clearInterval(progressCheckInterval); // 清除进度检查
     console.error('❌ 上传失败:', error.message || error);
+    if (error.stack) {
+      console.error('错误堆栈:', error.stack);
+    }
     process.exit(1);
   });
 
