@@ -52,21 +52,98 @@ class LoginScene {
   }
 
   async login() {
-    // 显示登录方式选择（开发测试期间）
-    wx.showActionSheet({
-      itemList: ['游客登录（推荐测试）', '微信登录'],
-      success: (res) => {
-        if (res.tapIndex === 0) {
-          this.guestLogin();
-        } else if (res.tapIndex === 1) {
-          this.wechatLogin();
-        }
-      },
-      fail: () => {
-        // 默认使用游客登录
-        this.guestLogin();
+    // 先尝试微信登录，失败后自动降级为游客登录
+    wx.showLoading({ title: '登录中...' });
+    
+    try {
+      // 1. 尝试微信登录
+      console.log('🔐 尝试微信登录...');
+      const res = await new Promise((resolve, reject) => {
+        wx.login({
+          success: resolve,
+          fail: reject,
+        });
+      });
+
+      // 获取用户信息
+      const userInfo = await new Promise((resolve, reject) => {
+        wx.getUserInfo({
+          success: (res) => resolve(res.userInfo),
+          fail: () => resolve({ nickName: '微信用户', avatarUrl: '' }),
+        });
+      });
+
+      // 调用后端微信登录接口
+      const response = await HttpClient.post('/auth/login', {
+        code: res.code,
+        userInfo: userInfo,
+      });
+
+      if (response.code === 0 && response.data) {
+        const { token, user } = response.data;
+        
+        wx.hideLoading();
+        wx.showToast({ title: '微信登录成功', icon: 'success' });
+        
+        console.log('✅ 微信登录成功:', user.nickname);
+
+        // 保存登录信息
+        wx.setStorageSync('token', token);
+        wx.setStorageSync('userInfo', user);
+        
+        // 设置HttpClient的token
+        HttpClient.setToken(token);
+
+        // 进入游戏
+        setTimeout(() => {
+          this.onLoginSuccess(user);
+        }, 500);
+      } else {
+        // 微信登录返回失败，降级为游客登录
+        throw new Error('微信登录返回失败');
       }
-    });
+
+    } catch (error) {
+      // 2. 微信登录失败，自动降级为游客登录
+      console.log('⚠️ 微信登录失败，降级为游客登录:', error.message || error);
+      
+      try {
+        const response = await HttpClient.post('/auth/guest-login', {
+          nickname: `游客${Math.random().toString(36).substr(2, 5)}`
+        });
+        
+        wx.hideLoading();
+        
+        if (response.code === 0 && response.data) {
+          const { token, user } = response.data;
+          
+          wx.showToast({ title: '游客登录成功', icon: 'success' });
+          
+          console.log('✅ 游客登录成功:', user.nickname);
+          
+          // 保存登录信息
+          wx.setStorageSync('token', token);
+          wx.setStorageSync('userInfo', user);
+          
+          // 设置HttpClient的token
+          HttpClient.setToken(token);
+          
+          setTimeout(() => {
+            this.onLoginSuccess(user);
+          }, 500);
+        } else {
+          throw new Error(response.message || '游客登录失败');
+        }
+      } catch (guestError) {
+        wx.hideLoading();
+        console.error('❌ 游客登录也失败了:', guestError);
+        wx.showToast({ 
+          title: '登录失败，请检查网络', 
+          icon: 'none',
+          duration: 2000
+        });
+      }
+    }
   }
 
   /**
