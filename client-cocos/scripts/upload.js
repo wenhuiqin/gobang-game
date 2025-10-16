@@ -37,10 +37,23 @@ const project = new ci.Project({
   type: 'minigame', // 小游戏类型
   projectPath: path.resolve(__dirname, '..'),
   privateKeyPath: privateKeyPath,
-  ignores: ['node_modules/**/*'],
+  ignores: [
+    'node_modules/**/*',
+    'scripts/**/*',
+    'package.json',
+    'package-lock.json',
+    '.git/**/*',
+    '.gitignore',
+    '*.log',
+    'logs/**/*',
+    '*.md',
+    '.DS_Store',
+  ],
 });
 
-ci.upload({
+// 创建上传超时控制
+const uploadTimeout = 15 * 60 * 1000; // 15分钟超时
+const uploadPromise = ci.upload({
   project,
   version: version,
   desc: desc,
@@ -54,18 +67,30 @@ ci.upload({
     autoPrefixWXSS: true,
   },
   onProgressUpdate: (task) => {
-    console.log(`📤 上传进度: ${task._msg}`);
+    // 改进进度显示
+    if (task) {
+      console.log(`📤 上传进度:`, JSON.stringify(task).substring(0, 100));
+    }
   },
-})
+});
+
+const timeoutPromise = new Promise((_, reject) => {
+  setTimeout(() => {
+    reject(new Error('上传超时（15分钟）'));
+  }, uploadTimeout);
+});
+
+Promise.race([uploadPromise, timeoutPromise])
   .then((result) => {
     console.log('✅ 上传成功！');
     console.log('📦 上传结果:', JSON.stringify(result, null, 2));
     console.log('');
     console.log('🎉 代码已上传到微信后台，可以登录后台提交审核了！');
     console.log('🔗 微信公众平台: https://mp.weixin.qq.com');
+    process.exit(0);
   })
   .catch((error) => {
-    console.error('❌ 上传失败:', error);
+    console.error('❌ 上传失败:', error.message || error);
     process.exit(1);
   });
 
