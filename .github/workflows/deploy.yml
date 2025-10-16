@@ -1,0 +1,83 @@
+name: 部署到云服务器
+
+on:
+  push:
+    branches:
+      - main  # 当推送到main分支时触发
+      - master
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v3
+    
+    - name: 设置Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'
+    
+    - name: 安装依赖并编译
+      run: |
+        cd server
+        npm install
+        npm run build
+    
+    - name: 部署到服务器
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: 22
+        source: "server/dist,server/package.json,server/package-lock.json,server/.env,server/database"
+        target: "/root/gobang"
+        strip_components: 1
+    
+    - name: 重启服务
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.SERVER_HOST }}
+        username: ${{ secrets.SERVER_USERNAME }}
+        password: ${{ secrets.SERVER_PASSWORD }}
+        port: 22
+        script: |
+          cd /root/gobang
+          npm install --production
+          
+          # 创建PM2配置文件
+          cat > ecosystem.config.js << 'EOF'
+          module.exports = {
+            apps: [{
+              name: 'gobang-server',
+              script: './dist/main.js',
+              instances: 2,
+              exec_mode: 'cluster',
+              env: {
+                NODE_ENV: 'production',
+                PORT: 3000
+              },
+              error_file: './logs/err.log',
+              out_file: './logs/out.log',
+              log_date_format: 'YYYY-MM-DD HH:mm:ss',
+              merge_logs: true,
+              autorestart: true,
+              max_memory_restart: '500M'
+            }]
+          };
+          EOF
+          
+          # 创建日志目录
+          mkdir -p logs
+          
+          # 重启PM2服务
+          pm2 delete gobang-server 2>/dev/null || true
+          pm2 start ecosystem.config.js
+          pm2 save
+          
+          echo "✅ 部署完成！"
+          pm2 status
+
