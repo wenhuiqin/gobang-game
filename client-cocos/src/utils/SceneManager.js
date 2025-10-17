@@ -258,6 +258,18 @@ class SceneManager {
     SceneManager.instance.startMultiplayer(roomId, myColor, opponentId);
   }
 
+  /**
+   * 进入等候房间
+   */
+  static enterWaitingRoom(roomCode, userInfo) {
+    if (!SceneManager.instance) {
+      console.error('SceneManager 未初始化');
+      return;
+    }
+    
+    SceneManager.instance.showWaitingRoom(roomCode, userInfo);
+  }
+
   startMultiplayer(roomId, myColor, opponent) {
     // 关键修复：强制关闭所有微信原生UI（modal/loading/toast）
     wx.hideLoading();
@@ -281,6 +293,51 @@ class SceneManager {
         userId: this.userInfo.id,
       }
     );
+  }
+
+  /**
+   * 显示等候房间
+   */
+  showWaitingRoom(roomCode, userInfo) {
+    this.destroyCurrentScene();
+    
+    const WaitingRoomScene = require('../scenes/WaitingRoomScene.js');
+    const SocketClient = require('../api/SocketClient.js');
+    
+    // 创建等候房间场景
+    this.currentScene = new WaitingRoomScene(
+      this.canvas,
+      this.ctx,
+      {
+        roomCode,
+        userInfo,
+        onGameStart: (roomCode, opponent) => {
+          // 对方加入，开始游戏
+          console.log('🎮 好友已加入，开始游戏');
+          this.startMultiplayer(roomCode, 1, opponent); // 创建者为黑方
+        },
+        onBack: () => {
+          // 返回菜单
+          SocketClient.off('playerJoined');
+          this.showMenu();
+        }
+      }
+    );
+    
+    // 确保Socket已连接
+    if (!SocketClient.connected) {
+      SocketClient.connect(userInfo.id, true);
+    }
+    
+    // 监听playerJoined事件
+    SocketClient.off('playerJoined');
+    SocketClient.on('playerJoined', (data) => {
+      console.log('✅ 收到 playerJoined 事件:', data);
+      
+      if (this.currentScene && this.currentScene.onOpponentJoin) {
+        this.currentScene.onOpponentJoin(data.opponent);
+      }
+    });
   }
 }
 
