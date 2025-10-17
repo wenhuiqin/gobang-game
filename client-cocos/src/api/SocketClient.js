@@ -28,6 +28,8 @@ class SocketClient {
     this.userId = userId;
     this.shouldReconnect = autoReconnect;
     
+    console.log(`📝 设置userId: ${userId}(${typeof userId})`);
+    
     // 清除之前的重连定时器
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
@@ -230,6 +232,7 @@ class SocketClient {
    * 下棋
    */
   makeMove(roomId, x, y) {
+    console.log(`📤 发送makeMove: roomId=${roomId}(${typeof roomId}), userId=${this.userId}(${typeof this.userId}), x=${x}, y=${y}`);
     this.send('makeMove', { roomId, userId: this.userId, x, y });
   }
 

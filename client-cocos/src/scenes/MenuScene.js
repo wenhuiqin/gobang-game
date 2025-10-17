@@ -416,56 +416,57 @@ class MenuScene {
         waitState.joined = true;
         console.log('✅ 对方加入房间:', data);
         
+        // 🧹 清理loading动画定时器
+        if (waitState.loadingInterval) {
+          clearInterval(waitState.loadingInterval);
+          waitState.loadingInterval = null;
+        }
+        
         const { opponent, yourColor, roomCode: joinedRoomCode } = data;
         
         const opponentName = opponent && opponent.nickname ? opponent.nickname : '对手';
         console.log(`🎮 对手${opponentName}已加入，准备进入游戏`);
         
-        // 关键修复：激进方案 - 多次尝试关闭UI
-        // 1. 第一次尝试
+        // 🔧 简化方案：直接关闭loading并进入游戏
         wx.hideLoading();
-        wx.hideToast();
-        
-        // 2. 立即显示新loading（尝试覆盖modal）
-        wx.showLoading({
-          title: '对方已加入',
-          mask: true
+        wx.showToast({
+          title: `${opponentName}已加入`,
+          icon: 'success',
+          duration: 800
         });
         
-        // 3. 50ms后再次尝试（如果modal正在显示动画）
-        setTimeout(() => {
-          wx.hideLoading();
-          wx.hideToast();
-          wx.showLoading({
-            title: '正在进入游戏...',
-            mask: true
-          });
-        }, 50);
-        
-        // 4. 200ms后进入游戏
+        // 短暂延迟后进入游戏
         setTimeout(() => {
           console.log('🚀 执行场景切换');
           const SceneManager = require('../utils/SceneManager.js');
           SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
-        }, 200);
+        }, 800);
       });
       
-      // 显示等待界面
+      // 🔧 激进修复：不使用modal，只用loading（避免无法关闭的问题）
       wx.showLoading({
         title: '等待对方加入...',
         mask: true
       });
       
-      // 500ms后显示可取消的等待对话框
-      setTimeout(() => {
+      // 定时刷新loading文本，给用户反馈（模拟进度）
+      let dots = 0;
+      const loadingInterval = setInterval(() => {
         if (waitState.joined || waitState.cancelled) {
-          console.log('⚠️ 等待已结束，不显示对话框');
+          clearInterval(loadingInterval);
           return;
         }
         
-        wx.hideLoading();
-        this.showWaitingModal(roomCode, SocketClient, waitState);
+        dots = (dots + 1) % 4;
+        const dotStr = '.'.repeat(dots);
+        wx.showLoading({
+          title: `等待对方加入${dotStr}`,
+          mask: true
+        });
       }, 500);
+      
+      // 保存interval引用以便清理
+      waitState.loadingInterval = loadingInterval;
     };
     
     // 确保WebSocket已连接

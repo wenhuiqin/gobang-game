@@ -39,8 +39,10 @@ class MultiplayerGameScene {
     this.dpr = wx.getSystemInfoSync().pixelRatio || 2;
 
     console.log('🎮 多人对战初始化:');
-    console.log('  房间ID:', this.roomId);
+    console.log('  房间ID:', this.roomId, `(${typeof this.roomId})`);
+    console.log('  用户ID:', this.userId, `(${typeof this.userId})`);
     console.log('  我的颜色:', this.myColor);
+    console.log('  对手ID:', this.opponentId);
     console.log('  对手信息:', this.opponent);
 
     this.bindEvents();
