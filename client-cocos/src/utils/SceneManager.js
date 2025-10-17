@@ -255,7 +255,7 @@ class SceneManager {
     SceneManager.instance.startMultiplayer(roomId, myColor, opponentId);
   }
 
-  startMultiplayer(roomId, myColor, opponentId) {
+  startMultiplayer(roomId, myColor, opponent) {
     this.destroyCurrentScene();
     
     const MultiplayerGameScene = require('../scenes/MultiplayerGameScene.js');
@@ -266,7 +266,8 @@ class SceneManager {
         mode: 'multiplayer',
         roomId,
         myColor,
-        opponentId,
+        opponentId: opponent && opponent.id ? opponent.id : null,
+        opponent: opponent, // 传递完整的对手信息
         userId: this.userInfo.id,
       }
     );

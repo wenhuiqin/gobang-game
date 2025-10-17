@@ -9,7 +9,7 @@ class MultiplayerGameScene {
   constructor(canvas, ctx, config) {
     this.canvas = canvas;
     this.ctx = ctx;
-    this.config = config; // { mode: 'multiplayer', roomId, myColor, opponentId }
+    this.config = config; // { mode: 'multiplayer', roomId, myColor, opponentId, opponent }
     
     const { windowWidth, windowHeight, safeArea } = wx.getSystemInfoSync();
     this.width = windowWidth;
@@ -26,6 +26,7 @@ class MultiplayerGameScene {
     // 房间信息
     this.roomId = config.roomId;
     this.opponentId = config.opponentId;
+    this.opponent = config.opponent || {}; // 对手信息：{ nickname, avatarUrl, etc }
     
     // 最后一手位置
     this.lastMove = null;
@@ -35,6 +36,11 @@ class MultiplayerGameScene {
 
     // DPR缩放
     this.dpr = wx.getSystemInfoSync().pixelRatio || 2;
+
+    console.log('🎮 多人对战初始化:');
+    console.log('  房间ID:', this.roomId);
+    console.log('  我的颜色:', this.myColor);
+    console.log('  对手信息:', this.opponent);
 
     this.bindEvents();
     this.setupWebSocket();
@@ -46,18 +52,64 @@ class MultiplayerGameScene {
   setupWebSocket() {
     // 确保已连接WebSocket
     if (!SocketClient.connected) {
-      SocketClient.connect(this.config.userId);
+      SocketClient.connect(this.config.userId, true); // 启用自动重连
     }
     
     // 清除旧的监听器
     SocketClient.off('moveMade');
     SocketClient.off('gameOver');
     SocketClient.off('error');
+    SocketClient.off('boardSync');
+    SocketClient.off('disconnected');
+    SocketClient.off('connected');
+    
+    // 监听重连成功，请求同步棋盘
+    SocketClient.on('connected', () => {
+      console.log('✅ WebSocket重连成功，请求同步棋盘...');
+      // 请求服务器同步当前房间的棋盘状态
+      SocketClient.send('requestBoardSync', { roomId: this.roomId });
+    });
+
+    // 监听断线
+    SocketClient.on('disconnected', () => {
+      console.warn('⚠️ WebSocket断开，等待重连...');
+      wx.showToast({
+        title: '连接断开，正在重连...',
+        icon: 'none',
+        duration: 2000
+      });
+    });
+
+    // 监听棋盘同步
+    SocketClient.on('boardSync', (data) => {
+      console.log('📥 收到棋盘同步:', data);
+      const { board, currentPlayer, lastMove } = data;
+      
+      if (board) {
+        this.board = board;
+        this.currentPlayer = currentPlayer;
+        if (lastMove) {
+          this.lastMove = lastMove;
+        }
+        
+        wx.showToast({
+          title: '棋盘已同步',
+          icon: 'success',
+          duration: 1000
+        });
+      }
+    });
     
     // 监听对手下棋
     SocketClient.on('moveMade', (data) => {
       console.log('📩 对手下棋:', data);
       const { x, y, color, nextPlayer } = data;
+      
+      // 防止重复下棋
+      if (this.board[x][y] !== 0) {
+        console.warn('⚠️ 该位置已有棋子，忽略');
+        return;
+      }
       
       this.board[x][y] = color;
       this.currentPlayer = nextPlayer;
@@ -334,22 +386,30 @@ class MultiplayerGameScene {
     const ctx = this.ctx;
     const { windowWidth } = wx.getSystemInfoSync();
 
-    const barHeight = 60;
+    const barHeight = 80;
     const barY = this.safeTop + 100;
 
     // 背景
     CanvasHelper.fillRoundRect(ctx, 20, barY, windowWidth - 40, barHeight, 10, 'rgba(255, 255, 255, 0.9)');
 
-    // 回合指示
+    // 对手信息
     ctx.fillStyle = '#2c3e50';
-    ctx.font = '20px Arial';
+    ctx.font = 'bold 18px Arial';
     ctx.textAlign = 'left';
     
-    const isMyTurn = this.currentPlayer === this.myColor;
-    const turnText = isMyTurn ? '你的回合' : '对手回合';
-    const colorText = this.myColor === Config.PIECE.BLACK ? '执黑' : '执白';
+    const opponentName = this.opponent.nickname || '对手';
+    const opponentColor = this.myColor === Config.PIECE.BLACK ? '执白' : '执黑';
     
-    ctx.fillText(`${colorText} | ${turnText}`, 40, barY + 35);
+    ctx.fillText(`对手：${opponentName}（${opponentColor}）`, 40, barY + 25);
+
+    // 回合指示
+    ctx.font = '16px Arial';
+    const isMyTurn = this.currentPlayer === this.myColor;
+    const turnText = isMyTurn ? '✅ 你的回合' : '⏳ 对手回合';
+    const myColorText = this.myColor === Config.PIECE.BLACK ? '执黑' : '执白';
+    
+    ctx.fillStyle = isMyTurn ? '#27ae60' : '#95a5a6';
+    ctx.fillText(`你（${myColorText}）- ${turnText}`, 40, barY + 50);
 
     // 棋子指示
     ctx.save();
@@ -357,13 +417,23 @@ class MultiplayerGameScene {
     const pieceY = barY + barHeight / 2;
     
     ctx.beginPath();
-    ctx.arc(pieceX, pieceY, 15, 0, Math.PI * 2);
+    ctx.arc(pieceX, pieceY, 18, 0, Math.PI * 2);
     ctx.fillStyle = this.currentPlayer === Config.PIECE.BLACK ? '#000000' : '#FFFFFF';
     ctx.fill();
     ctx.strokeStyle = '#333';
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.restore();
+
+    // 连接状态指示
+    if (!SocketClient.connected) {
+      ctx.save();
+      ctx.fillStyle = '#e74c3c';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'right';
+      ctx.fillText('● 连接断开', windowWidth - 40, barY + 70);
+      ctx.restore();
+    }
   }
 
   /**

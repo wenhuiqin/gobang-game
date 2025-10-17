@@ -151,25 +151,42 @@ class MenuScene {
     
     // 监听匹配成功
     const onMatchFound = (data) => {
-      if (matchState.cancelled || matchState.found) return;
+      if (matchState.cancelled || matchState.found) {
+        console.log('⚠️ 匹配已处理，忽略重复消息');
+        return;
+      }
       
       matchState.found = true;
       console.log('✅ 匹配成功:', data);
+      console.log('👤 对手信息:', data.opponent);
       
       const { roomId, opponent, yourColor } = data;
       
-      // 显示匹配成功提示
+      // 立即关闭所有弹窗和loading
+      wx.hideLoading();
+      
+      // 移除所有事件监听，防止重复触发
+      SocketClient.off('matchFound', onMatchFound);
+      SocketClient.off('matchJoined', onMatchJoined);
+      SocketClient.off('matchError', onMatchError);
+      SocketClient.off('matchCancelled', onMatchCancelled);
+      
+      // 显示匹配成功信息（包含对手信息）
+      const opponentName = opponent && opponent.nickname ? opponent.nickname : '未知玩家';
+      const colorText = yourColor === 1 ? '⚫ 黑方（先手）' : '⚪ 白方（后手）';
+      
       wx.showToast({ 
-        title: '匹配成功！', 
+        title: `匹配成功！对手：${opponentName}`, 
         icon: 'success',
-        duration: 1000
+        duration: 1500
       });
       
-      // 延迟进入游戏，让用户看到提示
+      // 延迟进入游戏
       setTimeout(() => {
+        console.log(`🎮 进入对战房间 ${roomId}，你是${colorText}`);
         const SceneManager = require('../utils/SceneManager.js');
         SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
-      }, 1000);
+      }, 1500);
     };
     
     // 监听加入队列成功

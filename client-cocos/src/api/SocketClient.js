@@ -9,23 +9,34 @@ class SocketClient {
     this.connected = false;
     this.userId = null;
     this.listeners = {}; // 事件监听器
+    this.reconnectTimer = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelay = 3000; // 3秒
+    this.shouldReconnect = false; // 是否应该自动重连
   }
 
   /**
    * 连接WebSocket
    */
-  connect(userId) {
+  connect(userId, autoReconnect = true) {
     if (this.connected) {
       console.log('⚠️ Socket已连接');
       return;
     }
 
     this.userId = userId;
+    this.shouldReconnect = autoReconnect;
+    
+    // 清除之前的重连定时器
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
     
     // 微信小游戏使用wx.connectSocket
-    // Socket.io客户端需要特殊处理，这里简化为直接WebSocket
     const url = `${Config.WS_BASE_URL}?userId=${userId}`;
-    console.log('🔌 连接WebSocket:', url);
+    console.log(`🔌 连接WebSocket (尝试 ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}):`, url);
 
     const socketTask = wx.connectSocket({
       url,
@@ -34,6 +45,7 @@ class SocketClient {
       },
       fail: (err) => {
         console.error('❌ Socket连接失败:', err);
+        this.handleReconnect();
       },
     });
 
@@ -43,6 +55,7 @@ class SocketClient {
     socketTask.onOpen(() => {
       console.log('✅ Socket已打开');
       this.connected = true;
+      this.reconnectAttempts = 0; // 重置重连计数
       this.emit('connected');
     });
 
@@ -70,22 +83,66 @@ class SocketClient {
     });
 
     // 监听关闭
-    socketTask.onClose(() => {
-      console.log('🔌 Socket已关闭');
+    socketTask.onClose((res) => {
+      console.log('🔌 Socket已关闭:', res);
       this.connected = false;
       this.emit('disconnected');
+      
+      // 如果不是主动关闭，尝试重连
+      if (this.shouldReconnect) {
+        this.handleReconnect();
+      }
     });
+  }
+
+  /**
+   * 处理重连
+   */
+  handleReconnect() {
+    if (!this.shouldReconnect) {
+      console.log('⚠️ 自动重连已禁用');
+      return;
+    }
+
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.error('❌ 达到最大重连次数，停止重连');
+      wx.showToast({
+        title: '连接失败，请重新进入',
+        icon: 'none',
+        duration: 2000
+      });
+      return;
+    }
+
+    this.reconnectAttempts++;
+    console.log(`⏳ ${this.reconnectDelay / 1000}秒后尝试重连...`);
+
+    this.reconnectTimer = setTimeout(() => {
+      if (this.userId && !this.connected) {
+        console.log('🔄 尝试重连...');
+        this.connect(this.userId, true);
+      }
+    }, this.reconnectDelay);
   }
 
   /**
    * 断开连接
    */
   disconnect() {
+    this.shouldReconnect = false; // 禁用自动重连
+    
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    
     if (this.socket) {
       this.socket.close();
       this.socket = null;
       this.connected = false;
     }
+    
+    this.reconnectAttempts = 0;
   }
 
   /**
