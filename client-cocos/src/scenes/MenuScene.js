@@ -335,23 +335,17 @@ class MenuScene {
         // 保存房间号
         this.currentRoomCode = roomCode;
         
-        // 显示成功提示
-        wx.showToast({
-          title: `房间 ${roomCode} 创建成功`,
-          icon: 'success',
-          duration: 1000
-        });
+        console.log('🏠 房间创建成功，立即设置监听器');
         
-        // 立即进入房间等候状态（不等待用户操作）
-        setTimeout(() => {
-          this.enterRoomWaiting(roomCode, room);
-        }, 1000);
+        // 关键修复：立即进入房间等候状态，不延迟！
+        // 确保在对方加入前就设置好 playerJoined 监听器
+        this.enterRoomWaiting(roomCode, room);
         
-        // 显示分享选项对话框（与等候状态同时进行）
+        // 短暂延迟后显示分享对话框（给 Socket 连接时间）
         setTimeout(() => {
           wx.showModal({
-            title: '邀请好友',
-            content: `房间号：${roomCode}\n\n你已进入房间等候\n请邀请好友加入`,
+            title: '房间已创建',
+            content: `房间号：${roomCode}\n\n请邀请好友加入`,
             confirmText: '微信分享',
             cancelText: '复制房间号',
             success: (modalRes) => {
@@ -372,7 +366,7 @@ class MenuScene {
               }
             }
           });
-        }, 1200);
+        }, 500);
       } else {
         console.log('❌ 条件不满足，显示失败提示');
         console.log('response.code:', response.code);
@@ -399,6 +393,7 @@ class MenuScene {
     console.log('🏠 创建者进入房间等候:', roomCode);
     
     const SocketClient = require('../api/SocketClient.js');
+    console.log('🔌 Socket连接状态:', SocketClient.connected);
     
     // 等待状态
     const waitState = {
@@ -406,59 +401,74 @@ class MenuScene {
       cancelled: false // 是否已取消
     };
     
-    // 确保WebSocket已连接
-    if (!SocketClient.connected) {
-      SocketClient.connect(this.userInfo.id, true);
-    }
-    
-    // 监听对方加入房间
-    SocketClient.off('playerJoined'); // 清除旧监听
-    const onPlayerJoined = (data) => {
-      if (waitState.joined || waitState.cancelled) {
-        console.log('⚠️ 等待已结束，忽略');
-        return;
-      }
+    // 设置监听器和显示UI的函数
+    const setupListenerAndUI = () => {
+      console.log('📝 设置 playerJoined 监听器');
       
-      waitState.joined = true;
-      console.log('✅ 对方加入房间:', data);
+      // 监听对方加入房间
+      SocketClient.off('playerJoined'); // 清除旧监听
+      SocketClient.on('playerJoined', (data) => {
+        if (waitState.joined || waitState.cancelled) {
+          console.log('⚠️ 等待已结束，忽略');
+          return;
+        }
+        
+        waitState.joined = true;
+        console.log('✅ 对方加入房间:', data);
+        
+        const { opponent, yourColor, roomCode: joinedRoomCode } = data;
+        
+        const opponentName = opponent && opponent.nickname ? opponent.nickname : '对手';
+        console.log(`🎮 对手${opponentName}已加入，准备进入游戏`);
+        
+        // 关键修复：显示一个新的loading会自动关闭之前的modal
+        wx.showLoading({
+          title: '正在进入游戏...',
+          mask: true
+        });
+        
+        // 短暂延迟后进入游戏，确保modal被loading覆盖
+        setTimeout(() => {
+          wx.hideLoading();
+          const SceneManager = require('../utils/SceneManager.js');
+          SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
+        }, 300);
+      });
       
-      const { opponent, yourColor, roomCode: joinedRoomCode } = data;
-      
-      const opponentName = opponent && opponent.nickname ? opponent.nickname : '对手';
-      console.log(`🎮 对手${opponentName}已加入，准备进入游戏`);
-      
-      // 关键修复：显示一个新的loading会自动关闭之前的modal
+      // 显示等待界面
       wx.showLoading({
-        title: '正在进入游戏...',
+        title: '等待对方加入...',
         mask: true
       });
       
-      // 短暂延迟后进入游戏，确保modal被loading覆盖
+      // 500ms后显示可取消的等待对话框
       setTimeout(() => {
+        if (waitState.joined || waitState.cancelled) {
+          console.log('⚠️ 等待已结束，不显示对话框');
+          return;
+        }
+        
         wx.hideLoading();
-        const SceneManager = require('../utils/SceneManager.js');
-        SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
-      }, 300);
+        this.showWaitingModal(roomCode, SocketClient, waitState);
+      }, 500);
     };
     
-    SocketClient.on('playerJoined', onPlayerJoined);
-    
-    // 显示等待界面
-    wx.showLoading({
-      title: '等待对方加入...',
-      mask: true
-    });
-    
-    // 500ms后显示可取消的等待对话框
-    setTimeout(() => {
-      if (waitState.joined || waitState.cancelled) {
-        console.log('⚠️ 等待已结束，不显示对话框');
-        return;
-      }
+    // 确保WebSocket已连接
+    if (!SocketClient.connected) {
+      console.log('🔌 Socket未连接，开始连接...');
+      SocketClient.connect(this.userInfo.id, true);
       
-      wx.hideLoading();
-      this.showWaitingModal(roomCode, SocketClient, waitState);
-    }, 500);
+      // 等待连接成功后再设置监听器
+      SocketClient.off('connected');
+      SocketClient.on('connected', () => {
+        console.log('✅ Socket连接成功，设置监听器');
+        setupListenerAndUI();
+      });
+    } else {
+      // 已连接，立即设置监听器
+      console.log('✅ Socket已连接，立即设置监听器');
+      setupListenerAndUI();
+    }
   }
   
   /**
