@@ -5,7 +5,7 @@
 
 module.exports = {
   // 版本信息
-  VERSION: '1.0.34', // 版本号，每次发布更新
+  VERSION: '1.0.35', // 版本号，每次发布更新
   
   // 微信小游戏配置
   WECHAT_APP_ID: 'wx4379feb1257bd826',

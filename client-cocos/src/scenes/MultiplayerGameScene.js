@@ -47,6 +47,20 @@ class MultiplayerGameScene {
 
     this.bindEvents();
     this.setupWebSocket();
+    
+    // 启动游戏循环
+    this.running = true;
+    this.gameLoop();
+  }
+  
+  /**
+   * 游戏循环
+   */
+  gameLoop() {
+    if (!this.running) return;
+    
+    this.render();
+    requestAnimationFrame(() => this.gameLoop());
   }
 
   /**
@@ -630,6 +644,7 @@ class MultiplayerGameScene {
    * 销毁场景
    */
   destroy() {
+    this.running = false; // 停止游戏循环
     wx.offTouchStart(this.touchHandler);
     SocketClient.off('moveMade');
     SocketClient.off('gameOver');
