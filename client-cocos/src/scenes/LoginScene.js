@@ -68,19 +68,41 @@ class LoginScene {
       // 2. 获取用户信息（使用新API wx.getUserProfile）
       let userInfo = null;
       try {
+        console.log('📝 弹出授权窗口，请求获取昵称和头像...');
         const profileRes = await new Promise((resolve, reject) => {
           wx.getUserProfile({
-            desc: '用于完善用户资料', // 必填，显示在授权弹窗中
+            desc: '获取你的昵称和头像，用于显示个人信息', // 必填，显示在授权弹窗中
             success: resolve,
             fail: reject,
           });
         });
         userInfo = profileRes.userInfo;
         console.log('✅ 获取用户信息成功:', userInfo);
+        console.log('   昵称:', userInfo.nickName);
+        console.log('   头像:', userInfo.avatarUrl);
       } catch (profileError) {
-        console.warn('⚠️ 用户拒绝授权或获取信息失败，使用默认信息');
-        // 用户拒绝授权，使用默认信息
-        userInfo = null;
+        console.error('❌ 用户拒绝授权或获取信息失败:', profileError);
+        wx.hideLoading();
+        
+        // 🔧 明确提示用户授权失败
+        const result = await new Promise((resolve) => {
+          wx.showModal({
+            title: '需要授权',
+            content: '需要获取你的微信昵称和头像才能显示个人信息哦~\n\n点击"重新授权"可获取真实昵称，\n或选择"游客登录"继续游戏。',
+            confirmText: '重新授权',
+            cancelText: '游客登录',
+            success: resolve
+          });
+        });
+        
+        if (result.confirm) {
+          // 用户选择重新授权
+          wx.showLoading({ title: '登录中...' });
+          return this.login(); // 递归重试
+        } else {
+          // 用户选择游客登录
+          throw new Error('用户选择游客登录');
+        }
       }
 
       // 3. 调用后端微信登录接口
@@ -348,10 +370,16 @@ class LoginScene {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
     ctx.shadowBlur = 2;
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 26px Arial';
+    ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('开始游戏', this.width / 2, btnY + btnH / 2);
+    ctx.fillText('微信授权登录', this.width / 2, btnY + btnH / 2);
+    
+    // 提示文字
+    ctx.shadowBlur = 0;
+    ctx.font = '12px Arial';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.fillText('获取你的昵称和头像', this.width / 2, btnY + btnH + 10);
     
     ctx.restore();
     

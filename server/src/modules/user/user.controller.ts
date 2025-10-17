@@ -1,4 +1,4 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { CurrentUser } from '@/common/decorators/user.decorator';
 import { Public } from '@/common/decorators/public.decorator';
@@ -15,6 +15,34 @@ export class UserController {
   @Get('profile')
   async getProfile(@CurrentUser() user: any) {
     return this.userService.findById(user.id);
+  }
+  
+  /**
+   * 更新用户信息（昵称、头像）
+   */
+  @Post('update-profile')
+  async updateProfile(
+    @CurrentUser() user: any,
+    @Body() body: { nickname?: string; avatarUrl?: string },
+  ) {
+    const { nickname, avatarUrl } = body;
+    
+    await this.userService.update(user.id, {
+      nickname,
+      avatarUrl,
+    });
+    
+    // 返回更新后的用户信息
+    const updatedUser = await this.userService.findById(user.id);
+    return {
+      code: 0,
+      message: '更新成功',
+      data: {
+        id: updatedUser.id,
+        nickname: updatedUser.nickname,
+        avatarUrl: updatedUser.avatarUrl,
+      },
+    };
   }
 
   /**

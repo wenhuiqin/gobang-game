@@ -50,6 +50,17 @@ class MenuScene {
       return;
     }
     
+    // 检查更新昵称按钮（昵称旁边的刷新图标）
+    const refreshBtnX = this.width / 2 + 60;
+    const refreshBtnY = safeTop + 120 + 15;
+    const refreshBtnSize = 20;
+    
+    if (x >= refreshBtnX && x <= refreshBtnX + refreshBtnSize && 
+        y >= refreshBtnY && y <= refreshBtnY + refreshBtnSize) {
+      this.handleUpdateProfile();
+      return;
+    }
+    
     // 检查菜单项
     const startY = safeTop + 220;
     const itemHeight = 90;
@@ -500,6 +511,9 @@ class MenuScene {
     ctx.textAlign = 'center';
     ctx.fillText(`欢迎, ${this.userInfo.nickname}`, this.width / 2, cardY + 25);
     
+    // 更新昵称按钮（昵称旁边的刷新图标）
+    this.drawRefreshButton(ctx, this.width / 2 + 60, cardY + 15);
+    
     ctx.font = '15px Arial';
     ctx.fillStyle = '#757575';
     const games = this.userInfo.totalGames || 0;
@@ -708,6 +722,43 @@ class MenuScene {
   }
 
   /**
+   * 绘制刷新按钮（更新昵称）
+   */
+  drawRefreshButton(ctx, x, y) {
+    const size = 20;
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    
+    ctx.save();
+    
+    // 圆形背景
+    ctx.fillStyle = 'rgba(25, 118, 210, 0.1)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 刷新图标（圆形箭头）
+    ctx.strokeStyle = '#1976D2';
+    ctx.lineWidth = 1.5;
+    ctx.lineCap = 'round';
+    
+    // 圆弧
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, 6, -Math.PI / 2, Math.PI * 1.5, false);
+    ctx.stroke();
+    
+    // 箭头
+    ctx.beginPath();
+    ctx.moveTo(centerX + 6, centerY);
+    ctx.lineTo(centerX + 3, centerY - 3);
+    ctx.moveTo(centerX + 6, centerY);
+    ctx.lineTo(centerX + 6, centerY + 3);
+    ctx.stroke();
+    
+    ctx.restore();
+  }
+  
+  /**
    * 绘制退出登录按钮
    */
   drawLogoutButton(ctx, x, y) {
@@ -750,6 +801,65 @@ class MenuScene {
     ctx.restore();
   }
 
+  /**
+   * 处理更新个人信息
+   */
+  async handleUpdateProfile() {
+    try {
+      wx.showLoading({ title: '获取中...' });
+      
+      // 调用微信授权获取用户信息
+      const profileRes = await new Promise((resolve, reject) => {
+        wx.getUserProfile({
+          desc: '更新你的昵称和头像',
+          success: resolve,
+          fail: reject,
+        });
+      });
+      
+      const userInfo = profileRes.userInfo;
+      console.log('✅ 获取用户信息成功:', userInfo);
+      
+      // 调用后端接口更新用户信息
+      const HttpClient = require('../api/HttpClient.js');
+      const response = await HttpClient.post('/user/update-profile', {
+        nickname: userInfo.nickName,
+        avatarUrl: userInfo.avatarUrl,
+      });
+      
+      wx.hideLoading();
+      
+      if (response.code === 0) {
+        // 更新本地缓存
+        this.userInfo.nickname = userInfo.nickName;
+        this.userInfo.avatarUrl = userInfo.avatarUrl;
+        wx.setStorageSync('userInfo', this.userInfo);
+        
+        wx.showToast({
+          title: '更新成功',
+          icon: 'success',
+        });
+      } else {
+        throw new Error(response.message || '更新失败');
+      }
+    } catch (error) {
+      wx.hideLoading();
+      console.error('更新个人信息失败:', error);
+      
+      if (error.errMsg && error.errMsg.includes('cancel')) {
+        wx.showToast({
+          title: '已取消',
+          icon: 'none',
+        });
+      } else {
+        wx.showToast({
+          title: '更新失败',
+          icon: 'none',
+        });
+      }
+    }
+  }
+  
   /**
    * 处理退出登录
    */
