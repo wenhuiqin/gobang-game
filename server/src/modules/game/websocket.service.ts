@@ -1,6 +1,7 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { WebSocketServer, WebSocket } from 'ws';
 import { RedisService } from '@/shared/redis/redis.service';
+import { UserService } from '../user/user.service';
 import { REDIS_KEYS } from '@/common/constants/redis-keys.constants';
 import * as url from 'url';
 
@@ -15,7 +16,10 @@ export class WebSocketService implements OnModuleInit {
   private readonly logger = new Logger(WebSocketService.name);
   private clients: Map<string, WebSocketClient> = new Map();
 
-  constructor(private readonly redisService: RedisService) {}
+  constructor(
+    private readonly redisService: RedisService,
+    private readonly userService: UserService,
+  ) {}
 
   onModuleInit() {
     this.wss = new WebSocketServer({ port: 3001, path: '/game' });
@@ -97,6 +101,9 @@ export class WebSocketService implements OnModuleInit {
       case 'surrender':
         await this.handleSurrender(ws, data);
         break;
+      case 'requestBoardSync':
+        await this.handleBoardSync(ws, data);
+        break;
       default:
         this.logger.warn(`未知事件: ${event}`);
     }
@@ -177,6 +184,12 @@ export class WebSocketService implements OnModuleInit {
     await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
     await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
 
+    // 获取双方用户信息
+    const [user1Info, user2Info] = await Promise.all([
+      this.userService.findById(player1.userId).catch(() => null),
+      this.userService.findById(player2.userId).catch(() => null),
+    ]);
+
     // 生成房间ID
     const roomId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -187,22 +200,37 @@ export class WebSocketService implements OnModuleInit {
         roomId,
         player1: player1.userId,
         player2: player2.userId,
+        player1Info: user1Info ? {
+          id: user1Info.id,
+          nickname: user1Info.nickname,
+          avatarUrl: user1Info.avatarUrl,
+        } : null,
+        player2Info: user2Info ? {
+          id: user2Info.id,
+          nickname: user2Info.nickname,
+          avatarUrl: user2Info.avatarUrl,
+        } : null,
         status: 'playing',
         board: Array(15).fill(null).map(() => Array(15).fill(0)),
         currentPlayer: 1,
+        lastMove: null,
         createdAt: new Date().toISOString(),
       }),
       7200
     );
 
-    // 通知两个玩家
+    // 通知两个玩家（包含完整对手信息）
     const client1 = this.clients.get(player1.userId);
     const client2 = this.clients.get(player2.userId);
 
     if (client1) {
       this.send(client1, 'matchFound', {
         roomId,
-        opponent: player2.userId,
+        opponent: user2Info ? {
+          id: user2Info.id,
+          nickname: user2Info.nickname,
+          avatarUrl: user2Info.avatarUrl,
+        } : { id: player2.userId, nickname: '对手' },
         yourColor: 1,
       });
     }
@@ -210,7 +238,11 @@ export class WebSocketService implements OnModuleInit {
     if (client2) {
       this.send(client2, 'matchFound', {
         roomId,
-        opponent: player1.userId,
+        opponent: user1Info ? {
+          id: user1Info.id,
+          nickname: user1Info.nickname,
+          avatarUrl: user1Info.avatarUrl,
+        } : { id: player1.userId, nickname: '对手' },
         yourColor: 2,
       });
     }
@@ -246,6 +278,7 @@ export class WebSocketService implements OnModuleInit {
     // 放置棋子
     room.board[x][y] = playerColor;
     room.currentPlayer = playerColor === 1 ? 2 : 1;
+    room.lastMove = { x, y }; // 保存最后一步
 
     // 更新Redis
     await this.redisService.set(REDIS_KEYS.GAME_ROOM(roomId), JSON.stringify(room), 7200);
@@ -294,6 +327,32 @@ export class WebSocketService implements OnModuleInit {
     if (client2) {
       this.send(client2, 'gameOver', gameOverData);
     }
+  }
+
+  /**
+   * 处理棋盘同步
+   */
+  private async handleBoardSync(ws: WebSocketClient, data: any) {
+    const { roomId } = data;
+
+    this.logger.log(`棋盘同步请求: roomId=${roomId}`);
+
+    const roomData = await this.redisService.get(REDIS_KEYS.GAME_ROOM(roomId));
+    if (!roomData) {
+      this.send(ws, 'error', { message: '房间不存在' });
+      return;
+    }
+
+    const room = JSON.parse(roomData);
+
+    // 返回当前房间状态
+    this.send(ws, 'boardSync', {
+      board: room.board,
+      currentPlayer: room.currentPlayer,
+      lastMove: room.lastMove,
+    });
+
+    this.logger.log(`棋盘同步成功: roomId=${roomId}`);
   }
 
   /**
