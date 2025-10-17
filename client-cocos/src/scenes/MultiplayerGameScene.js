@@ -25,6 +25,7 @@ class MultiplayerGameScene {
     
     // 房间信息
     this.roomId = config.roomId;
+    this.userId = config.userId; // 我的userId
     this.opponentId = config.opponentId;
     this.opponent = config.opponent || {}; // 对手信息：{ nickname, avatarUrl, etc }
     
@@ -124,15 +125,30 @@ class MultiplayerGameScene {
     // 监听游戏结束
     SocketClient.on('gameOver', (data) => {
       console.log('🏁 游戏结束:', data);
+      console.log('🔍 我的userId:', this.userId);
+      console.log('🔍 获胜者userId:', data.winner);
+      
       const { winner, reason } = data;
       
       this.gameOver = true;
       this.winner = winner;
       
-      const message = reason === 'surrender' ? '对手认输' : '对手获胜';
+      // 判断是否获胜（将两者都转为字符串比较）
+      const isWinner = String(winner) === String(this.userId);
+      const title = isWinner ? '🎉 你赢了！' : '😢 你输了！';
+      
+      // 根据reason生成提示文案
+      let message = '';
+      if (reason === 'surrender') {
+        message = isWinner ? '对手认输了' : '你认输了';
+      } else if (reason === 'disconnect') {
+        message = '对手已断线';
+      } else {
+        message = isWinner ? '恭喜获胜！' : '再接再厉！';
+      }
       
       wx.showModal({
-        title: winner === this.config.userId ? '你赢了！' : '你输了！',
+        title: title,
         content: message,
         showCancel: true,
         confirmText: '返回菜单',

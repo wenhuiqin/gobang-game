@@ -104,6 +104,10 @@ export class RedisService implements OnModuleDestroy {
     return this.client.llen(key);
   }
 
+  async keys(pattern: string): Promise<string[]> {
+    return this.client.keys(pattern);
+  }
+
   onModuleDestroy() {
     this.client.disconnect();
   }

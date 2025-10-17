@@ -387,6 +387,57 @@ export class WebSocketService implements OnModuleInit {
         this.logger.error('解析队列数据错误:', err);
       }
     }
+    
+    // 查找该用户所在的游戏房间，通知对方
+    await this.notifyOpponentOnDisconnect(userId);
+  }
+  
+  /**
+   * 通知对方玩家：对手已断线
+   */
+  private async notifyOpponentOnDisconnect(userId: string) {
+    try {
+      // 遍历所有游戏房间，查找包含该userId的房间
+      const keys = await this.redisService.keys('game_room:*');
+      
+      for (const key of keys) {
+        const roomData = await this.redisService.get(key);
+        if (!roomData) continue;
+        
+        const room = JSON.parse(roomData);
+        let opponentId = null;
+        let winnerId = null;
+        
+        // 判断断线的是哪一方
+        if (room.player1 === userId) {
+          opponentId = room.player2;
+          winnerId = room.player2; // 对方获胜
+        } else if (room.player2 === userId) {
+          opponentId = room.player1;
+          winnerId = room.player1; // 对方获胜
+        }
+        
+        // 如果找到对手，通知对手
+        if (opponentId) {
+          this.logger.log(`📢 通知对手 ${opponentId}: 对方 ${userId} 已断线`);
+          
+          const opponentWs = this.clients.get(opponentId);
+          if (opponentWs) {
+            this.send(opponentWs, 'gameOver', {
+              winner: winnerId,
+              reason: 'disconnect',
+            });
+          }
+          
+          // 删除房间
+          await this.redisService.del(key);
+          this.logger.log(`🗑️  删除房间: ${key}`);
+          break;
+        }
+      }
+    } catch (err) {
+      this.logger.error('通知对方断线失败:', err);
+    }
   }
 
   /**
