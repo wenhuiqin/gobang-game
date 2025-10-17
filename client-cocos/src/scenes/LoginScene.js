@@ -289,10 +289,10 @@ class LoginScene {
     ctx.shadowOffsetY = 2;
     
     ctx.fillStyle = '#1565C0'; // 深蓝色
-    ctx.font = 'bold 52px Arial';
+    ctx.font = 'bold 44px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('传统五子棋', this.width / 2, safeTop + 120);
+    ctx.fillText('传统五子棋大挑战', this.width / 2, safeTop + 120);
     ctx.restore();
     
     // 副标题

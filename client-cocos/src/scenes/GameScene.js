@@ -439,9 +439,9 @@ class GameScene {
     this.ctx.shadowBlur = 10;
     this.ctx.shadowOffsetY = 3;
     this.ctx.fillStyle = '#2c3e50';
-    this.ctx.font = 'bold 36px Arial';
+    this.ctx.font = 'bold 32px Arial';
     this.ctx.textAlign = 'center';
-    this.ctx.fillText('传统五子棋', windowWidth / 2, titleY);
+    this.ctx.fillText('传统五子棋大挑战', windowWidth / 2, titleY);
     this.ctx.restore();
     
     // 绘制返回按钮
