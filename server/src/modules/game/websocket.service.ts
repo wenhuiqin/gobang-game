@@ -480,13 +480,18 @@ export class WebSocketService implements OnModuleInit {
    * 通知玩家有人加入房间（用于好友对战）
    */
   public notifyPlayerJoined(creatorId: string, data: any) {
+    this.logger.log(`📢 notifyPlayerJoined调用: creatorId=${creatorId}, type=${typeof creatorId}`);
+    this.logger.log(`📢 当前连接的客户端列表: ${Array.from(this.clients.keys()).join(', ')}`);
+    
     const creatorWs = this.clients.get(creatorId);
     
     if (creatorWs) {
-      this.logger.log(`通知创建者 ${creatorId}: 有人加入房间`);
+      this.logger.log(`✅ 找到创建者WebSocket连接 ${creatorId}`);
+      this.logger.log(`📤 发送playerJoined事件:`, JSON.stringify(data));
       this.send(creatorWs, 'playerJoined', data);
     } else {
-      this.logger.warn(`创建者 ${creatorId} 未连接WebSocket`);
+      this.logger.error(`❌ 创建者 ${creatorId} 未连接WebSocket`);
+      this.logger.error(`❌ 可用的连接ID: ${Array.from(this.clients.keys()).join(', ')}`);
     }
   }
 }

@@ -23,21 +23,25 @@ export class AuthService {
     
     if (!user) {
       // 创建新用户
+      // 处理 userInfo 为 null 的情况（用户拒绝授权）
+      const nickname = userInfo?.nickName || `微信用户${Math.random().toString(36).substr(2, 5)}`;
+      const avatarUrl = userInfo?.avatarUrl || 'https://via.placeholder.com/100?text=User';
+      
       user = await this.userService.create({
         openid,
         unionid,
-        nickname: userInfo.nickName || '游客',
-        avatarUrl: userInfo.avatarUrl,
+        nickname,
+        avatarUrl,
       });
     } else {
       // 更新最后登录时间
       await this.userService.updateLastLogin(user.id);
       
-      // 更新用户信息
-      if (userInfo.nickName && userInfo.nickName !== user.nickname) {
+      // 更新用户信息（仅当提供了有效的 userInfo 时）
+      if (userInfo && userInfo.nickName && userInfo.nickName !== user.nickname) {
         await this.userService.update(user.id, {
           nickname: userInfo.nickName,
-          avatarUrl: userInfo.avatarUrl,
+          avatarUrl: userInfo.avatarUrl || user.avatarUrl,
         });
         user = await this.userService.findById(user.id);
       }

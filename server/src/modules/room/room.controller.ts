@@ -70,6 +70,9 @@ export class RoomController {
       });
       
       // 通过WebSocket通知房间创建者：有人加入了
+      console.log(`🔔 准备通知创建者: creatorId=${room.creatorId}, type=${typeof room.creatorId}`);
+      console.log(`🔔 加入者信息: userId=${userInfo.id}, nickname=${userInfo.nickname}`);
+      
       this.websocketService.notifyPlayerJoined(room.creatorId, {
         roomCode: room.roomCode,
         opponent: {
