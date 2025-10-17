@@ -74,17 +74,20 @@ class SceneManager {
       wx.hideLoading();
       
       if (response.code === 0 && response.data) {
-        const { room, yourColor, opponentId } = response.data;
+        const { room, yourColor, opponent } = response.data;
+        
+        console.log('✅ 通过分享链接加入房间:', { roomCode, yourColor, opponent });
         
         wx.showToast({
           title: '加入成功',
-          icon: 'success'
+          icon: 'success',
+          duration: 1500
         });
         
         // 进入双人对战场景
         setTimeout(() => {
-          this.startMultiplayer(roomCode, yourColor, opponentId);
-        }, 500);
+          this.startMultiplayer(roomCode, yourColor, opponent);
+        }, 1500);
       } else {
         wx.showToast({
           title: response.message || '加入失败',

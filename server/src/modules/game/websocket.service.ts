@@ -389,5 +389,19 @@ export class WebSocketService implements OnModuleInit {
       ws.send(JSON.stringify({ event, data }));
     }
   }
+
+  /**
+   * 通知玩家有人加入房间（用于好友对战）
+   */
+  public notifyPlayerJoined(creatorId: string, data: any) {
+    const creatorWs = this.clients.get(creatorId);
+    
+    if (creatorWs) {
+      this.logger.log(`通知创建者 ${creatorId}: 有人加入房间`);
+      this.send(creatorWs, 'playerJoined', data);
+    } else {
+      this.logger.warn(`创建者 ${creatorId} 未连接WebSocket`);
+    }
+  }
 }
 

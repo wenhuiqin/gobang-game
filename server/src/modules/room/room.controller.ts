@@ -1,8 +1,9 @@
-import { Controller, Post, Get, Delete, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Delete, Body, Param, UseGuards, Inject, forwardRef } from '@nestjs/common';
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard';
 import { CurrentUser } from '@/common/decorators/user.decorator';
 import { RoomService } from './room.service';
 import { UserService } from '@/modules/user/user.service';
+import { WebSocketService } from '@/modules/game/websocket.service';
 
 @Controller('room')
 @UseGuards(JwtAuthGuard)
@@ -10,6 +11,8 @@ export class RoomController {
   constructor(
     private readonly roomService: RoomService,
     private readonly userService: UserService,
+    @Inject(forwardRef(() => WebSocketService))
+    private readonly websocketService: WebSocketService,
   ) {}
 
   /**
@@ -47,6 +50,20 @@ export class RoomController {
       const userInfo = await this.userService.findById(user.id);
       const room = await this.roomService.joinRoom(roomCode, user.id, userInfo.nickname);
       
+      // 获取房间创建者信息
+      const creatorInfo = await this.userService.findById(room.creatorId);
+      
+      // 通过WebSocket通知房间创建者：有人加入了
+      this.websocketService.notifyPlayerJoined(room.creatorId, {
+        roomCode: room.roomCode,
+        opponent: {
+          id: userInfo.id,
+          nickname: userInfo.nickname,
+          avatarUrl: userInfo.avatarUrl,
+        },
+        yourColor: 1, // 创建者为黑方
+      });
+      
       // 返回房间信息和玩家颜色（加入者为白方）
       return {
         code: 0,
@@ -55,6 +72,11 @@ export class RoomController {
           room,
           yourColor: 2, // 加入者为白方
           opponentId: room.creatorId,
+          opponent: {
+            id: creatorInfo.id,
+            nickname: creatorInfo.nickname,
+            avatarUrl: creatorInfo.avatarUrl,
+          },
         },
       };
     } catch (error) {

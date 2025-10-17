@@ -17,7 +17,7 @@ import { RedisModule } from '@/shared/redis/redis.module';
   ],
   controllers: [GameController],
   providers: [WebSocketService, GameService],
-  exports: [GameService],
+  exports: [GameService, WebSocketService], // 导出 WebSocketService
 })
 export class GameModule {}
 

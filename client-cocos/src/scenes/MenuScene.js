@@ -272,31 +272,32 @@ class MenuScene {
       console.log('🔍 response.data:', response.data);
       
       if (response.code === 0 && response.data) {
-        const { roomCode } = response.data;
+        const { roomCode, room } = response.data;
         console.log('🔍 房间号:', roomCode);
-        console.log('✅ 准备显示弹窗');
+        console.log('🔍 房间信息:', room);
         
-        // 保存房间号，用于分享
+        // 保存房间号
         this.currentRoomCode = roomCode;
         
-        // 先显示成功提示
+        // 显示成功提示
         wx.showToast({
-          title: `房间创建成功`,
+          title: `房间 ${roomCode} 创建成功`,
           icon: 'success',
-          duration: 2000
+          duration: 1500
         });
         
-        // 然后显示操作选项
+        // 显示分享选项对话框
         setTimeout(() => {
-          console.log('📢 调用 wx.showActionSheet');
-          wx.showActionSheet({
-            itemList: [`分享给好友（房间号：${roomCode}）`, `复制房间号：${roomCode}`],
-            success: (res) => {
-              console.log('📢 用户选择:', res.tapIndex);
-              if (res.tapIndex === 0) {
+          wx.showModal({
+            title: '房间已创建',
+            content: `房间号：${roomCode}\n\n选择"分享"邀请好友，或"复制"房间号手动发送`,
+            confirmText: '分享',
+            cancelText: '复制房间号',
+            success: (modalRes) => {
+              if (modalRes.confirm) {
                 // 分享给好友
                 this.shareRoom(roomCode);
-              } else if (res.tapIndex === 1) {
+              } else if (modalRes.cancel) {
                 // 复制房间号
                 wx.setClipboardData({
                   data: roomCode,
@@ -308,12 +309,12 @@ class MenuScene {
                   }
                 });
               }
-            },
-            fail: (err) => {
-              console.error('❌ ActionSheet失败:', err);
+              
+              // 无论选择什么，都进入房间等候
+              this.enterRoomWaiting(roomCode, room);
             }
           });
-        }, 2000);
+        }, 1500);
       } else {
         console.log('❌ 条件不满足，显示失败提示');
         console.log('response.code:', response.code);
@@ -333,22 +334,108 @@ class MenuScene {
     }
   }
   
+  /**
+   * 进入房间等候（创建者等待对方加入）
+   */
+  enterRoomWaiting(roomCode, room) {
+    console.log('🏠 创建者进入房间等候:', roomCode);
+    
+    const SocketClient = require('../api/SocketClient.js');
+    
+    // 确保WebSocket已连接
+    if (!SocketClient.connected) {
+      SocketClient.connect(this.userInfo.id, true);
+    }
+    
+    // 显示等待界面
+    wx.showLoading({
+      title: '等待对方加入...',
+      mask: true
+    });
+    
+    // 监听对方加入房间
+    SocketClient.off('playerJoined'); // 清除旧监听
+    SocketClient.on('playerJoined', (data) => {
+      console.log('✅ 对方加入房间:', data);
+      wx.hideLoading();
+      
+      const { opponent, yourColor } = data;
+      
+      wx.showToast({
+        title: `${opponent.nickname || '对手'}已加入`,
+        icon: 'success',
+        duration: 1500
+      });
+      
+      // 进入游戏
+      setTimeout(() => {
+        const SceneManager = require('../utils/SceneManager.js');
+        SceneManager.startMultiplayerGame(roomCode, yourColor, opponent);
+      }, 1500);
+    });
+    
+    // 添加取消等待按钮
+    setTimeout(() => {
+      wx.hideLoading();
+      wx.showModal({
+        title: '等待对方加入',
+        content: `房间号：${roomCode}\n\n已复制到剪贴板，可发送给好友`,
+        showCancel: true,
+        cancelText: '取消等待',
+        confirmText: '继续等待',
+        success: (res) => {
+          if (!res.confirm) {
+            // 取消等待，返回菜单
+            SocketClient.off('playerJoined');
+            console.log('❌ 用户取消等待');
+          } else {
+            // 继续等待，递归显示
+            this.showWaitingModal(roomCode, SocketClient);
+          }
+        }
+      });
+    }, 500);
+  }
+  
+  /**
+   * 显示等待对话框（递归）
+   */
+  showWaitingModal(roomCode, SocketClient) {
+    wx.showModal({
+      title: '等待对方加入',
+      content: `房间号：${roomCode}\n\n请耐心等待好友加入`,
+      showCancel: true,
+      cancelText: '取消等待',
+      confirmText: '继续等待',
+      success: (res) => {
+        if (!res.confirm) {
+          SocketClient.off('playerJoined');
+          console.log('❌ 用户取消等待');
+        } else {
+          // 继续等待
+          this.showWaitingModal(roomCode, SocketClient);
+        }
+      }
+    });
+  }
+
   shareRoom(roomCode) {
-    // 设置分享信息
+    // 微信分享（需要用户主动触发）
     wx.shareAppMessage({
       title: '五子棋对战邀请',
       imageUrl: '', // 可以设置分享图片
       query: `roomCode=${roomCode}`, // 关键：传递房间号
       success: () => {
+        console.log('✅ 分享成功');
         wx.showToast({
           title: '分享成功',
           icon: 'success'
         });
       },
       fail: (err) => {
-        console.error('分享失败:', err);
+        console.error('❌ 分享失败:', err);
         wx.showToast({
-          title: '分享失败',
+          title: '分享失败，请复制房间号',
           icon: 'none'
         });
       }
@@ -380,18 +467,21 @@ class MenuScene {
             wx.hideLoading();
             
             if (response.code === 0 && response.data) {
-              const { room, yourColor, opponentId } = response.data;
+              const { room, yourColor, opponent } = response.data;
+              
+              console.log('✅ 加入房间成功:', { roomCode, yourColor, opponent });
               
               wx.showToast({
                 title: '加入成功',
-                icon: 'success'
+                icon: 'success',
+                duration: 1500
               });
               
               // 进入双人对战场景
               setTimeout(() => {
                 const SceneManager = require('../utils/SceneManager.js');
-                SceneManager.startMultiplayerGame(roomCode, yourColor, opponentId);
-              }, 500);
+                SceneManager.startMultiplayerGame(roomCode, yourColor, opponent);
+              }, 1500);
             } else {
               wx.showToast({
                 title: response.message || '加入失败',
