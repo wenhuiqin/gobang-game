@@ -123,37 +123,105 @@ export class UserService {
 
   /**
    * 获取排行榜
+   * @param limit 返回数量
+   * @param type 排行榜类型: online | ai-easy | ai-medium | ai-hard
    */
-  async getLeaderboard(limit: number = 50) {
-    const users = await this.userRepository.find({
-      order: {
-        rating: 'DESC',
-        winGames: 'DESC',
-        totalGames: 'ASC',
-      },
-      take: limit,
-      select: [
-        'id',
-        'nickname',
-        'avatarUrl',
-        'rating',
-        'level',
-        'totalGames',
-        'winGames',
-        'loseGames',
-        'drawGames',
-        'winStreak',
-        'maxWinStreak',
-      ],
-    });
+  async getLeaderboard(limit: number = 50, type: string = 'online') {
+    const { gameType, aiDifficulty } = this.parseRankType(type);
+    
+    // 从game_records表中统计战绩
+    const query = this.userRepository
+      .createQueryBuilder('user')
+      .leftJoin(
+        'game_records',
+        'gr',
+        'gr.black_player_id = user.id OR gr.white_player_id = user.id',
+      )
+      .where('gr.game_type = :gameType', { gameType });
+    
+    // 如果是人机对战，添加难度筛选
+    if (aiDifficulty) {
+      query.andWhere('gr.ai_difficulty = :aiDifficulty', { aiDifficulty });
+    }
+    
+    const users = await query
+      .select([
+        'user.id',
+        'user.nickname',
+        'user.avatarUrl',
+        'COUNT(gr.id) as total_games',
+        'SUM(CASE WHEN gr.winner_id = user.id THEN 1 ELSE 0 END) as win_games',
+      ])
+      .groupBy('user.id')
+      .having('total_games > 0')
+      .orderBy('win_games', 'DESC')
+      .addOrderBy('total_games', 'ASC')
+      .limit(limit)
+      .getRawMany();
+    
+    // 计算连胜和胜率
+    const enrichedUsers = await Promise.all(
+      users.map(async (user, index) => {
+        const totalGames = parseInt(user.total_games);
+        const winGames = parseInt(user.win_games);
+        const loseGames = totalGames - winGames;
+        
+        // 计算最高连胜
+        const maxWinStreak = await this.calculateMaxWinStreak(
+          user.user_id,
+          gameType,
+          aiDifficulty,
+        );
+        
+        return {
+          id: user.user_id,
+          nickname: user.user_nickname,
+          avatarUrl: user.user_avatarUrl,
+          totalGames,
+          winGames,
+          loseGames,
+          drawGames: 0,
+          maxWinStreak,
+          rank: index + 1,
+          winRate: totalGames > 0
+            ? parseFloat(((winGames / totalGames) * 100).toFixed(2))
+            : 0,
+        };
+      }),
+    );
+    
+    return enrichedUsers;
+  }
 
-    return users.map((user, index) => ({
-      ...user,
-      rank: index + 1,
-      winRate: user.totalGames > 0
-        ? parseFloat(((user.winGames / user.totalGames) * 100).toFixed(2))
-        : 0,
-    }));
+  /**
+   * 解析排行榜类型
+   */
+  private parseRankType(type: string): { gameType: number; aiDifficulty?: number } {
+    switch (type) {
+      case 'online':
+        return { gameType: 1 }; // 随机匹配/在线对战
+      case 'ai-easy':
+        return { gameType: 2, aiDifficulty: 1 };
+      case 'ai-medium':
+        return { gameType: 2, aiDifficulty: 2 };
+      case 'ai-hard':
+        return { gameType: 2, aiDifficulty: 3 };
+      default:
+        return { gameType: 1 };
+    }
+  }
+
+  /**
+   * 计算最高连胜
+   */
+  private async calculateMaxWinStreak(
+    userId: string,
+    gameType: number,
+    aiDifficulty?: number,
+  ): Promise<number> {
+    // TODO: 实现连胜计算逻辑
+    // 这里暂时返回0，后续可以优化
+    return 0;
   }
 }
 

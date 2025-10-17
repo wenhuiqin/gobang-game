@@ -31,13 +31,18 @@ export class UserController {
 
   /**
    * 获取排行榜（公开接口）
+   * @param type online | ai-easy | ai-medium | ai-hard
    */
   @Get('leaderboard')
   @Public()
-  async getLeaderboard(@Query('limit') limit?: string) {
+  async getLeaderboard(
+    @Query('limit') limit?: string,
+    @Query('type') type?: string,
+  ) {
     // Query参数是字符串，需要转换为数字
     const limitNum = limit ? parseInt(limit, 10) : 50;
-    return this.userService.getLeaderboard(limitNum);
+    const rankType = type || 'online'; // 默认在线对战排行榜
+    return this.userService.getLeaderboard(limitNum, rankType);
   }
 }
 

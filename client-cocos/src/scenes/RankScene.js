@@ -20,8 +20,20 @@ class RankScene {
     this.rankList = [];
     this.loading = true;
     
+    // Tab选项: online, ai-easy, ai-medium, ai-hard
+    this.tabs = [
+      { type: 'online', name: '在线对战' },
+      { type: 'ai-easy', name: '人机简单' },
+      { type: 'ai-medium', name: '人机中等' },
+      { type: 'ai-hard', name: '人机困难' },
+    ];
+    this.currentTab = 'online';
+    
     // 返回按钮
     this.backButton = null;
+    
+    // Tab按钮区域
+    this.tabButtons = [];
     
     this.bindEvents();
     this.loadRankData();
@@ -43,6 +55,19 @@ class RankScene {
           y >= btn.y && y <= btn.y + btn.height) {
         const SceneManager = require('../utils/SceneManager.js');
         SceneManager.switchScene('menu');
+        return;
+      }
+    }
+    
+    // 检测Tab点击
+    for (const tab of this.tabButtons) {
+      if (x >= tab.x && x <= tab.x + tab.width &&
+          y >= tab.y && y <= tab.y + tab.height) {
+        if (this.currentTab !== tab.type) {
+          this.currentTab = tab.type;
+          this.loadRankData();
+        }
+        return;
       }
     }
   }
@@ -50,10 +75,10 @@ class RankScene {
   async loadRankData() {
     this.loading = true;
     try {
-      const response = await HttpClient.get('/user/leaderboard');
+      const response = await HttpClient.get(`/user/leaderboard?type=${this.currentTab}`);
       if (response.code === 0 && response.data) {
         this.rankList = response.data.slice(0, 50); // 只显示前50名
-        console.log('排行榜数据:', this.rankList);
+        console.log(`${this.currentTab}排行榜数据:`, this.rankList);
       }
     } catch (error) {
       console.error('加载排行榜失败:', error);
@@ -95,10 +120,13 @@ class RankScene {
     ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
     ctx.shadowBlur = 8;
     ctx.fillStyle = '#1565C0';
-    ctx.font = 'bold 32px Arial';
+    ctx.font = 'bold 28px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('🏆 排行榜', this.width / 2, safeTop + 70);
+    ctx.fillText('🏆 排行榜', this.width / 2, safeTop + 60);
     ctx.restore();
+    
+    // 绘制Tab按钮
+    this.drawTabs(safeTop);
     
     // 绘制排行榜内容
     if (this.loading) {
@@ -150,18 +178,66 @@ class RankScene {
     ctx.restore();
   }
 
+  drawTabs(safeTop) {
+    const ctx = this.ctx;
+    const tabY = safeTop + 90;
+    const tabHeight = 36;
+    const tabWidth = (this.width - 40) / 4; // 4个tab平分宽度
+    const padding = 8;
+    
+    this.tabButtons = [];
+    
+    this.tabs.forEach((tab, index) => {
+      const tabX = 20 + index * tabWidth;
+      
+      // 保存tab区域用于点击检测
+      this.tabButtons.push({
+        x: tabX,
+        y: tabY,
+        width: tabWidth - padding,
+        height: tabHeight,
+        type: tab.type
+      });
+      
+      // 绘制tab背景
+      ctx.save();
+      const isActive = this.currentTab === tab.type;
+      
+      if (isActive) {
+        ctx.fillStyle = '#1976D2';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+        ctx.shadowBlur = 5;
+        ctx.shadowOffsetY = 2;
+      } else {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+      }
+      
+      CanvasHelper.fillRoundRect(ctx, tabX, tabY, tabWidth - padding, tabHeight, 8, ctx.fillStyle);
+      ctx.restore();
+      
+      // 绘制tab文字
+      ctx.save();
+      ctx.fillStyle = isActive ? '#FFFFFF' : '#757575';
+      ctx.font = isActive ? 'bold 13px Arial' : '13px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(tab.name, tabX + (tabWidth - padding) / 2, tabY + tabHeight / 2);
+      ctx.restore();
+    });
+  }
+
   drawLoading(safeTop) {
     const ctx = this.ctx;
     ctx.fillStyle = '#666666';
     ctx.font = '20px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('加载中...', this.width / 2, safeTop + 200);
+    ctx.fillText('加载中...', this.width / 2, safeTop + 250);
   }
 
   drawRankList(safeTop) {
     const ctx = this.ctx;
-    const startY = safeTop + 120;
-    const itemHeight = 70;
+    const startY = safeTop + 145; // 增加起始位置，为tab留出空间
+    const itemHeight = 60;
     const padding = 20;
     
     if (this.rankList.length === 0) {
@@ -176,7 +252,7 @@ class RankScene {
     this.rankList.forEach((item, index) => {
       if (index >= 10) return; // 只显示前10名
       
-      const y = startY + index * (itemHeight + 10);
+      const y = startY + index * (itemHeight + 8);
       this.drawRankItem(item, index + 1, padding, y, this.width - padding * 2, itemHeight);
     });
   }
@@ -251,12 +327,14 @@ class RankScene {
     ctx.fillText(`${item.winGames}胜 ${item.totalGames - item.winGames}负 胜率${winRate}%`, 
       x + 80, y + height / 2 + 12);
     
-    // 积分
-    ctx.fillStyle = '#1565C0';
-    ctx.font = 'bold 20px Arial';
-    ctx.textAlign = 'right';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(`${item.rating || 1000}分`, x + width - 20, y + height / 2);
+    // 最高连胜
+    if (item.maxWinStreak && item.maxWinStreak > 0) {
+      ctx.fillStyle = '#FF6F00';
+      ctx.font = 'bold 16px Arial';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(`🔥${item.maxWinStreak}连胜`, x + width - 20, y + height / 2);
+    }
   }
 }
 

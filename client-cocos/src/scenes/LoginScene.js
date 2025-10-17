@@ -58,32 +58,42 @@ class LoginScene {
     try {
       // 1. 尝试微信登录
       console.log('🔐 尝试微信登录...');
-      const res = await new Promise((resolve, reject) => {
+      const loginRes = await new Promise((resolve, reject) => {
         wx.login({
           success: resolve,
           fail: reject,
         });
       });
 
-      // 获取用户信息
-      const userInfo = await new Promise((resolve, reject) => {
-        wx.getUserInfo({
-          success: (res) => resolve(res.userInfo),
-          fail: () => resolve({ nickName: '微信用户', avatarUrl: '' }),
+      // 2. 获取用户信息（使用新API wx.getUserProfile）
+      let userInfo = null;
+      try {
+        const profileRes = await new Promise((resolve, reject) => {
+          wx.getUserProfile({
+            desc: '用于完善用户资料', // 必填，显示在授权弹窗中
+            success: resolve,
+            fail: reject,
+          });
         });
-      });
+        userInfo = profileRes.userInfo;
+        console.log('✅ 获取用户信息成功:', userInfo);
+      } catch (profileError) {
+        console.warn('⚠️ 用户拒绝授权或获取信息失败，使用默认信息');
+        // 用户拒绝授权，使用默认信息
+        userInfo = null;
+      }
 
-      // 调用后端微信登录接口
+      // 3. 调用后端微信登录接口
       const response = await HttpClient.post('/auth/login', {
-        code: res.code,
-        userInfo: userInfo,
+        code: loginRes.code,
+        userInfo: userInfo, // 可能为null
       });
 
       if (response.code === 0 && response.data) {
         const { token, user } = response.data;
         
         wx.hideLoading();
-        wx.showToast({ title: '微信登录成功', icon: 'success' });
+        wx.showToast({ title: '登录成功', icon: 'success' });
         
         console.log('✅ 微信登录成功:', user.nickname);
 
@@ -106,28 +116,28 @@ class LoginScene {
     } catch (error) {
       // 2. 微信登录失败，自动降级为游客登录
       console.log('⚠️ 微信登录失败，降级为游客登录:', error.message || error);
-      
+
       try {
         const response = await HttpClient.post('/auth/guest-login', {
           nickname: `游客${Math.random().toString(36).substr(2, 5)}`
         });
-        
+
         wx.hideLoading();
-        
+
         if (response.code === 0 && response.data) {
           const { token, user } = response.data;
-          
+
           wx.showToast({ title: '游客登录成功', icon: 'success' });
-          
+
           console.log('✅ 游客登录成功:', user.nickname);
-          
+
           // 保存登录信息
           wx.setStorageSync('token', token);
           wx.setStorageSync('userInfo', user);
-          
+
           // 设置HttpClient的token
           HttpClient.setToken(token);
-          
+
           setTimeout(() => {
             this.onLoginSuccess(user);
           }, 500);
@@ -137,8 +147,8 @@ class LoginScene {
       } catch (guestError) {
         wx.hideLoading();
         console.error('❌ 游客登录也失败了:', guestError);
-        wx.showToast({ 
-          title: '登录失败，请检查网络', 
+        wx.showToast({
+          title: '登录失败，请检查网络',
           icon: 'none',
           duration: 2000
         });
