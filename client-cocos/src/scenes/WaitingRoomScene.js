@@ -58,7 +58,8 @@ class WaitingRoomScene {
   setupWebSocket() {
     // 确保WebSocket已连接
     if (!SocketClient.connected) {
-      const userId = wx.getStorageSync('userInfo')?.id;
+      const userInfo = wx.getStorageSync('userInfo');
+      const userId = userInfo ? userInfo.id : null;
       if (userId) {
         SocketClient.connect(userId, true);
       }
