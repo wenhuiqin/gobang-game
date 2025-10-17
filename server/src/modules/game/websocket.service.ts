@@ -115,7 +115,7 @@ export class WebSocketService implements OnModuleInit {
   private async handleJoinMatch(ws: WebSocketClient, data: any) {
     const { userId, rating } = data;
 
-    this.logger.log(`用户加入匹配: userId=${userId}, rating=${rating}`);
+    this.logger.log(`📥 收到加入匹配请求: userId=${userId}, rating=${rating}`);
 
     // 检查是否已在队列中，如果在则先移除（避免重复）
     const queueData = await this.redisService.lrange(REDIS_KEYS.MATCH_QUEUE, 0, -1);
@@ -223,7 +223,10 @@ export class WebSocketService implements OnModuleInit {
     const client1 = this.clients.get(player1.userId);
     const client2 = this.clients.get(player2.userId);
 
+    this.logger.log(`🔍 查找WebSocket连接: player1=${player1.userId}, client1=${!!client1}, player2=${player2.userId}, client2=${!!client2}`);
+
     if (client1) {
+      this.logger.log(`📤 通知玩家1 (${player1.userId}): 匹配成功，yourColor=1`);
       this.send(client1, 'matchFound', {
         roomId,
         opponent: user2Info ? {
@@ -233,9 +236,12 @@ export class WebSocketService implements OnModuleInit {
         } : { id: player2.userId, nickname: '对手' },
         yourColor: 1,
       });
+    } else {
+      this.logger.error(`❌ 玩家1 (${player1.userId}) WebSocket未连接`);
     }
 
     if (client2) {
+      this.logger.log(`📤 通知玩家2 (${player2.userId}): 匹配成功，yourColor=2`);
       this.send(client2, 'matchFound', {
         roomId,
         opponent: user1Info ? {
@@ -245,6 +251,8 @@ export class WebSocketService implements OnModuleInit {
         } : { id: player1.userId, nickname: '对手' },
         yourColor: 2,
       });
+    } else {
+      this.logger.error(`❌ 玩家2 (${player2.userId}) WebSocket未连接`);
     }
   }
 

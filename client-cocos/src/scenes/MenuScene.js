@@ -106,14 +106,20 @@ class MenuScene {
   startRandomMatch() {
     const SocketClient = require('../api/SocketClient.js');
     
+    console.log('🎮 开始随机匹配');
+    console.log('👤 用户ID:', this.userInfo.id);
+    console.log('🔌 Socket连接状态:', SocketClient.connected);
+    
     // 确保Socket已连接
     if (!SocketClient.connected) {
+      console.log('🔌 Socket未连接，开始连接...');
       wx.showLoading({ title: '连接中...', mask: true });
       
-      SocketClient.connect(this.userInfo.id);
+      SocketClient.connect(this.userInfo.id, true); // 启用自动重连
       
       // 等待连接成功（只监听一次）
       const onConnected = () => {
+        console.log('✅ Socket连接成功，加入匹配队列');
         wx.hideLoading();
         SocketClient.off('connected', onConnected);
         this.joinMatchQueue();
@@ -124,18 +130,24 @@ class MenuScene {
       // 连接失败处理
       setTimeout(() => {
         if (!SocketClient.connected) {
+          console.error('❌ Socket连接超时');
           wx.hideLoading();
-          wx.showToast({ title: '连接失败', icon: 'none' });
+          wx.showToast({ title: '连接失败，请重试', icon: 'none' });
           SocketClient.off('connected', onConnected);
         }
       }, 5000);
     } else {
+      console.log('✅ Socket已连接，直接加入匹配队列');
       this.joinMatchQueue();
     }
   }
   
   joinMatchQueue() {
     const SocketClient = require('../api/SocketClient.js');
+    
+    console.log('🎯 加入匹配队列');
+    console.log('🔌 当前Socket连接状态:', SocketClient.connected);
+    console.log('👤 当前用户ID:', this.userInfo.id);
     
     // 清除旧的事件监听器，避免重复注册
     SocketClient.off('matchFound');
@@ -151,6 +163,9 @@ class MenuScene {
     
     // 监听匹配成功
     const onMatchFound = (data) => {
+      console.log('📩 收到matchFound事件:', data);
+      console.log('📊 当前matchState:', matchState);
+      
       if (matchState.cancelled) {
         console.log('⚠️ 匹配已取消，忽略');
         return;
@@ -162,19 +177,12 @@ class MenuScene {
       }
       
       matchState.found = true;
-      console.log('✅ 匹配成功:', data);
+      console.log('✅ 匹配成功，准备进入游戏');
       console.log('👤 对手信息:', data.opponent);
       console.log('🎨 我的颜色:', data.yourColor);
+      console.log('🏠 房间ID:', data.roomId);
       
       const { roomId, opponent, yourColor } = data;
-      
-      // 立即关闭所有弹窗
-      try {
-        wx.hideLoading();
-        wx.hideToast();
-      } catch (e) {
-        console.log('关闭弹窗失败:', e);
-      }
       
       // 移除所有事件监听，防止重复触发
       SocketClient.off('matchFound', onMatchFound);
@@ -182,29 +190,37 @@ class MenuScene {
       SocketClient.off('matchError', onMatchError);
       SocketClient.off('matchCancelled', onMatchCancelled);
       
+      // 立即关闭所有弹窗（包括modal）
+      console.log('🚫 关闭所有弹窗');
+      try {
+        wx.hideLoading();
+        wx.hideToast();
+      } catch (e) {
+        console.log('关闭loading/toast失败:', e);
+      }
+      
       // 显示匹配成功信息（包含对手信息）
       const opponentName = opponent && opponent.nickname ? opponent.nickname : '未知玩家';
       const colorText = yourColor === 1 ? '⚫ 黑方（先手）' : '⚪ 白方（后手）';
       
       console.log(`🎮 准备进入对战房间 ${roomId}，你是${colorText}，对手：${opponentName}`);
       
-      wx.showToast({ 
-        title: `匹配成功！`, 
-        icon: 'success',
-        duration: 1000
-      });
-      
-      // 延迟进入游戏
-      setTimeout(() => {
-        console.log(`🎮 正在进入游戏...`);
-        const SceneManager = require('../utils/SceneManager.js');
-        SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
-      }, 1000);
+      // 不再显示Toast，直接进入游戏（避免延迟）
+      console.log(`🎮 立即进入游戏`);
+      const SceneManager = require('../utils/SceneManager.js');
+      SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
     };
     
     // 监听加入队列成功
     const onMatchJoined = (data) => {
       console.log('✅ 已加入匹配队列:', data);
+      console.log('📊 当前matchState:', matchState);
+      
+      // 检查是否在显示对话框前就已经匹配成功了
+      if (matchState.found) {
+        console.log('⚡ 快速匹配成功，不显示等待对话框');
+        return;
+      }
       
       // 立即显示可取消的匹配对话框
       this.showMatchModal(SocketClient, matchState);
@@ -223,22 +239,32 @@ class MenuScene {
       console.log('✅ 取消匹配成功:', data);
     };
     
+    console.log('📝 注册事件监听器: matchFound, matchJoined, matchError, matchCancelled');
     SocketClient.on('matchFound', onMatchFound);
     SocketClient.on('matchJoined', onMatchJoined);
     SocketClient.on('matchError', onMatchError);
     SocketClient.on('matchCancelled', onMatchCancelled);
     
     // 发起匹配请求
-    SocketClient.joinMatch(this.userInfo.rating || 1000);
+    const rating = this.userInfo.rating || 1000;
+    console.log(`📤 发送joinMatch请求: userId=${this.userInfo.id}, rating=${rating}`);
+    SocketClient.joinMatch(rating);
   }
   
   // 显示匹配对话框（递归调用，直到匹配成功或取消）
   showMatchModal(SocketClient, matchState) {
+    console.log('💬 准备显示匹配对话框');
+    console.log('📊 matchState:', matchState);
+    
     // 检查是否已经匹配成功或取消
     if (matchState.cancelled || matchState.found) {
       console.log('⚠️ 匹配状态已变更，不再显示对话框');
       return;
     }
+    
+    // 设置一个标志位，防止在对话框显示后立即匹配成功时产生竞态条件
+    const modalDisplayTime = Date.now();
+    console.log(`💬 显示对话框: time=${modalDisplayTime}`);
     
     wx.showModal({
       title: '正在匹配',
@@ -247,25 +273,31 @@ class MenuScene {
       cancelText: '取消匹配',
       confirmText: '继续等待',
       success: (res) => {
+        console.log(`💬 对话框回调触发: confirm=${res.confirm}, time=${Date.now() - modalDisplayTime}ms后`);
+        console.log('📊 回调时matchState:', matchState);
+        
         // 检查匹配状态（可能在对话框显示期间匹配成功了）
         if (matchState.found) {
-          console.log('✅ 匹配已成功，不再显示对话框');
+          console.log('✅ 匹配已成功，对话框自动关闭');
           return;
         }
         
         if (!res.confirm) {
           // 用户点击取消匹配
+          console.log('❌ 用户取消匹配');
           matchState.cancelled = true;
           SocketClient.cancelMatch();
           wx.showToast({ title: '已取消匹配', icon: 'none' });
-        } else if (!matchState.cancelled) {
+        } else if (!matchState.cancelled && !matchState.found) {
           // 用户点击继续等待，递归显示对话框
+          console.log('♻️ 用户选择继续等待，递归显示对话框');
           this.showMatchModal(SocketClient, matchState);
         }
       },
-      fail: () => {
+      fail: (err) => {
         // 对话框显示失败，可能是匹配成功导致场景切换
-        console.log('⚠️ 对话框显示失败（可能匹配已成功）');
+        console.log('⚠️ 对话框显示失败:', err);
+        console.log('📊 失败时matchState:', matchState);
       }
     });
   }
