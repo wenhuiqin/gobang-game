@@ -259,6 +259,13 @@ class SceneManager {
   }
 
   startMultiplayer(roomId, myColor, opponent) {
+    // 关键修复：强制关闭所有微信原生UI（modal/loading/toast）
+    wx.hideLoading();
+    wx.hideToast();
+    // 注意：wx.showModal 没有 wx.hideModal，但可以用 wx.showLoading 来覆盖
+    
+    console.log('🎮 多人对战初始化:', { roomId, myColor, opponent });
+    
     this.destroyCurrentScene();
     
     const MultiplayerGameScene = require('../scenes/MultiplayerGameScene.js');

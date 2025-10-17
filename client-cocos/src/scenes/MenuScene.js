@@ -421,18 +421,23 @@ class MenuScene {
         const opponentName = opponent && opponent.nickname ? opponent.nickname : '对手';
         console.log(`🎮 对手${opponentName}已加入，准备进入游戏`);
         
-        // 关键修复：显示一个新的loading会自动关闭之前的modal
+        // 关键修复：三步走强制关闭所有可能的UI
+        // 1. 先隐藏可能存在的loading/toast
+        wx.hideLoading();
+        wx.hideToast();
+        
+        // 2. 显示新的loading（会自动覆盖modal）
         wx.showLoading({
           title: '正在进入游戏...',
           mask: true
         });
         
-        // 短暂延迟后进入游戏，确保modal被loading覆盖
+        // 3. 极短延迟后进入游戏（确保loading已显示并覆盖modal）
         setTimeout(() => {
-          wx.hideLoading();
+          console.log('🚀 执行场景切换');
           const SceneManager = require('../utils/SceneManager.js');
           SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
-        }, 300);
+        }, 150);
       });
       
       // 显示等待界面
