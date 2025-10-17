@@ -53,6 +53,22 @@ export class RoomController {
       // 获取房间创建者信息
       const creatorInfo = await this.userService.findById(room.creatorId);
       
+      // 创建游戏房间到Redis（用于棋盘同步）
+      await this.websocketService.createFriendGameRoom(roomCode, {
+        creatorId: room.creatorId,
+        creatorInfo: {
+          id: creatorInfo.id,
+          nickname: creatorInfo.nickname,
+          avatarUrl: creatorInfo.avatarUrl,
+        },
+        joinerId: userInfo.id,
+        joinerInfo: {
+          id: userInfo.id,
+          nickname: userInfo.nickname,
+          avatarUrl: userInfo.avatarUrl,
+        },
+      });
+      
       // 通过WebSocket通知房间创建者：有人加入了
       this.websocketService.notifyPlayerJoined(room.creatorId, {
         roomCode: room.roomCode,

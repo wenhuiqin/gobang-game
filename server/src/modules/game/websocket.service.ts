@@ -399,6 +399,33 @@ export class WebSocketService implements OnModuleInit {
   }
 
   /**
+   * 创建好友对战游戏房间（到Redis）
+   */
+  public async createFriendGameRoom(roomCode: string, roomData: any) {
+    this.logger.log(`创建好友游戏房间: roomCode=${roomCode}`);
+    
+    // 保存游戏房间信息到Redis（与在线匹配一致的结构）
+    await this.redisService.set(
+      REDIS_KEYS.GAME_ROOM(roomCode),
+      JSON.stringify({
+        roomId: roomCode,
+        player1: roomData.creatorId,
+        player2: roomData.joinerId,
+        player1Info: roomData.creatorInfo,
+        player2Info: roomData.joinerInfo,
+        status: 'playing',
+        board: Array(15).fill(null).map(() => Array(15).fill(0)),
+        currentPlayer: 1, // 黑方先手（创建者）
+        lastMove: null,
+        createdAt: new Date().toISOString(),
+      }),
+      7200 // 2小时过期
+    );
+    
+    this.logger.log(`✅ 好友游戏房间已创建: ${roomCode}`);
+  }
+
+  /**
    * 通知玩家有人加入房间（用于好友对战）
    */
   public notifyPlayerJoined(creatorId: string, data: any) {
