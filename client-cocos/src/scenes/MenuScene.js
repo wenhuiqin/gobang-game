@@ -151,19 +151,30 @@ class MenuScene {
     
     // 监听匹配成功
     const onMatchFound = (data) => {
-      if (matchState.cancelled || matchState.found) {
-        console.log('⚠️ 匹配已处理，忽略重复消息');
+      if (matchState.cancelled) {
+        console.log('⚠️ 匹配已取消，忽略');
+        return;
+      }
+      
+      if (matchState.found) {
+        console.log('⚠️ 已经处理过匹配成功，忽略重复消息');
         return;
       }
       
       matchState.found = true;
       console.log('✅ 匹配成功:', data);
       console.log('👤 对手信息:', data.opponent);
+      console.log('🎨 我的颜色:', data.yourColor);
       
       const { roomId, opponent, yourColor } = data;
       
-      // 立即关闭所有弹窗和loading
-      wx.hideLoading();
+      // 立即关闭所有弹窗
+      try {
+        wx.hideLoading();
+        wx.hideToast();
+      } catch (e) {
+        console.log('关闭弹窗失败:', e);
+      }
       
       // 移除所有事件监听，防止重复触发
       SocketClient.off('matchFound', onMatchFound);
@@ -175,18 +186,20 @@ class MenuScene {
       const opponentName = opponent && opponent.nickname ? opponent.nickname : '未知玩家';
       const colorText = yourColor === 1 ? '⚫ 黑方（先手）' : '⚪ 白方（后手）';
       
+      console.log(`🎮 准备进入对战房间 ${roomId}，你是${colorText}，对手：${opponentName}`);
+      
       wx.showToast({ 
-        title: `匹配成功！对手：${opponentName}`, 
+        title: `匹配成功！`, 
         icon: 'success',
-        duration: 1500
+        duration: 1000
       });
       
       // 延迟进入游戏
       setTimeout(() => {
-        console.log(`🎮 进入对战房间 ${roomId}，你是${colorText}`);
+        console.log(`🎮 正在进入游戏...`);
         const SceneManager = require('../utils/SceneManager.js');
         SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
-      }, 1500);
+      }, 1000);
     };
     
     // 监听加入队列成功
@@ -223,6 +236,7 @@ class MenuScene {
   showMatchModal(SocketClient, matchState) {
     // 检查是否已经匹配成功或取消
     if (matchState.cancelled || matchState.found) {
+      console.log('⚠️ 匹配状态已变更，不再显示对话框');
       return;
     }
     
@@ -233,15 +247,25 @@ class MenuScene {
       cancelText: '取消匹配',
       confirmText: '继续等待',
       success: (res) => {
+        // 检查匹配状态（可能在对话框显示期间匹配成功了）
+        if (matchState.found) {
+          console.log('✅ 匹配已成功，不再显示对话框');
+          return;
+        }
+        
         if (!res.confirm) {
           // 用户点击取消匹配
           matchState.cancelled = true;
           SocketClient.cancelMatch();
           wx.showToast({ title: '已取消匹配', icon: 'none' });
-        } else if (!matchState.found && !matchState.cancelled) {
+        } else if (!matchState.cancelled) {
           // 用户点击继续等待，递归显示对话框
           this.showMatchModal(SocketClient, matchState);
         }
+      },
+      fail: () => {
+        // 对话框显示失败，可能是匹配成功导致场景切换
+        console.log('⚠️ 对话框显示失败（可能匹配已成功）');
       }
     });
   }
@@ -283,15 +307,20 @@ class MenuScene {
         wx.showToast({
           title: `房间 ${roomCode} 创建成功`,
           icon: 'success',
-          duration: 1500
+          duration: 1000
         });
         
-        // 显示分享选项对话框
+        // 立即进入房间等候状态（不等待用户操作）
+        setTimeout(() => {
+          this.enterRoomWaiting(roomCode, room);
+        }, 1000);
+        
+        // 显示分享选项对话框（与等候状态同时进行）
         setTimeout(() => {
           wx.showModal({
-            title: '房间已创建',
-            content: `房间号：${roomCode}\n\n选择"分享"邀请好友，或"复制"房间号手动发送`,
-            confirmText: '分享',
+            title: '邀请好友',
+            content: `房间号：${roomCode}\n\n你已进入房间等候\n请邀请好友加入`,
+            confirmText: '微信分享',
             cancelText: '复制房间号',
             success: (modalRes) => {
               if (modalRes.confirm) {
@@ -309,12 +338,9 @@ class MenuScene {
                   }
                 });
               }
-              
-              // 无论选择什么，都进入房间等候
-              this.enterRoomWaiting(roomCode, room);
             }
           });
-        }, 1500);
+        }, 1200);
       } else {
         console.log('❌ 条件不满足，显示失败提示');
         console.log('response.code:', response.code);
@@ -342,10 +368,55 @@ class MenuScene {
     
     const SocketClient = require('../api/SocketClient.js');
     
+    // 等待状态
+    const waitState = {
+      joined: false, // 是否已有人加入
+      cancelled: false // 是否已取消
+    };
+    
     // 确保WebSocket已连接
     if (!SocketClient.connected) {
       SocketClient.connect(this.userInfo.id, true);
     }
+    
+    // 监听对方加入房间
+    SocketClient.off('playerJoined'); // 清除旧监听
+    const onPlayerJoined = (data) => {
+      if (waitState.joined || waitState.cancelled) {
+        console.log('⚠️ 等待已结束，忽略');
+        return;
+      }
+      
+      waitState.joined = true;
+      console.log('✅ 对方加入房间:', data);
+      
+      const { opponent, yourColor, roomCode: joinedRoomCode } = data;
+      
+      // 关闭所有弹窗
+      try {
+        wx.hideLoading();
+        wx.hideToast();
+      } catch (e) {
+        console.log('关闭弹窗失败:', e);
+      }
+      
+      const opponentName = opponent && opponent.nickname ? opponent.nickname : '对手';
+      console.log(`🎮 对手${opponentName}已加入，准备进入游戏`);
+      
+      wx.showToast({
+        title: `${opponentName}已加入`,
+        icon: 'success',
+        duration: 1000
+      });
+      
+      // 进入游戏
+      setTimeout(() => {
+        const SceneManager = require('../utils/SceneManager.js');
+        SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
+      }, 1000);
+    };
+    
+    SocketClient.on('playerJoined', onPlayerJoined);
     
     // 显示等待界面
     wx.showLoading({
@@ -353,54 +424,28 @@ class MenuScene {
       mask: true
     });
     
-    // 监听对方加入房间
-    SocketClient.off('playerJoined'); // 清除旧监听
-    SocketClient.on('playerJoined', (data) => {
-      console.log('✅ 对方加入房间:', data);
-      wx.hideLoading();
-      
-      const { opponent, yourColor } = data;
-      
-      wx.showToast({
-        title: `${opponent.nickname || '对手'}已加入`,
-        icon: 'success',
-        duration: 1500
-      });
-      
-      // 进入游戏
-      setTimeout(() => {
-        const SceneManager = require('../utils/SceneManager.js');
-        SceneManager.startMultiplayerGame(roomCode, yourColor, opponent);
-      }, 1500);
-    });
-    
-    // 添加取消等待按钮
+    // 500ms后显示可取消的等待对话框
     setTimeout(() => {
+      if (waitState.joined || waitState.cancelled) {
+        console.log('⚠️ 等待已结束，不显示对话框');
+        return;
+      }
+      
       wx.hideLoading();
-      wx.showModal({
-        title: '等待对方加入',
-        content: `房间号：${roomCode}\n\n已复制到剪贴板，可发送给好友`,
-        showCancel: true,
-        cancelText: '取消等待',
-        confirmText: '继续等待',
-        success: (res) => {
-          if (!res.confirm) {
-            // 取消等待，返回菜单
-            SocketClient.off('playerJoined');
-            console.log('❌ 用户取消等待');
-          } else {
-            // 继续等待，递归显示
-            this.showWaitingModal(roomCode, SocketClient);
-          }
-        }
-      });
+      this.showWaitingModal(roomCode, SocketClient, waitState);
     }, 500);
   }
   
   /**
    * 显示等待对话框（递归）
    */
-  showWaitingModal(roomCode, SocketClient) {
+  showWaitingModal(roomCode, SocketClient, waitState) {
+    // 检查等待状态
+    if (waitState.joined || waitState.cancelled) {
+      console.log('⚠️ 等待已结束，不再显示对话框');
+      return;
+    }
+    
     wx.showModal({
       title: '等待对方加入',
       content: `房间号：${roomCode}\n\n请耐心等待好友加入`,
@@ -408,13 +453,24 @@ class MenuScene {
       cancelText: '取消等待',
       confirmText: '继续等待',
       success: (res) => {
+        // 再次检查状态（可能在对话框显示期间有人加入）
+        if (waitState.joined) {
+          console.log('✅ 已有人加入，不再处理');
+          return;
+        }
+        
         if (!res.confirm) {
+          // 取消等待，返回菜单
+          waitState.cancelled = true;
           SocketClient.off('playerJoined');
           console.log('❌ 用户取消等待');
         } else {
-          // 继续等待
-          this.showWaitingModal(roomCode, SocketClient);
+          // 继续等待，递归显示
+          this.showWaitingModal(roomCode, SocketClient, waitState);
         }
+      },
+      fail: () => {
+        console.log('⚠️ 对话框显示失败（可能已有人加入）');
       }
     });
   }
