@@ -114,13 +114,19 @@ class LoginScene {
       }
 
     } catch (error) {
-      // 2. 微信登录失败，自动降级为游客登录
-      console.log('⚠️ 微信登录失败，降级为游客登录:', error.message || error);
+        // 2. 微信登录失败，自动降级为游客登录
+        console.log('⚠️ 微信登录失败，降级为游客登录:', error.message || error);
 
-      try {
-        const response = await HttpClient.post('/auth/guest-login', {
-          nickname: `游客${Math.random().toString(36).substr(2, 5)}`
-        });
+        try {
+          // 🔧 生成设备唯一ID（使用系统信息）
+          const systemInfo = wx.getSystemInfoSync();
+          const deviceId = `guest_${systemInfo.model}_${systemInfo.system}_${systemInfo.platform}`.replace(/\s+/g, '_');
+          console.log('📱 设备ID:', deviceId);
+          
+          const response = await HttpClient.post('/auth/guest-login', {
+            deviceId: deviceId,
+            nickname: `游客${Math.random().toString(36).substr(2, 5)}`
+          });
 
         wx.hideLoading();
 

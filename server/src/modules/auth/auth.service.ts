@@ -71,22 +71,26 @@ export class AuthService {
 
   /**
    * 游客登录（开发测试用）
+   * @param deviceId 设备唯一标识（前端传递）
    */
-  async guestLogin(nickname?: string) {
-    // 生成临时游客ID
-    const guestId = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  async guestLogin(deviceId?: string, nickname?: string) {
+    // 🔧 修复：使用设备ID作为唯一标识，确保每个设备独立游客账号
+    const guestId = deviceId || `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const guestNickname = nickname || `游客${Math.random().toString(36).substr(2, 5)}`;
     
     // 查找或创建游客用户
     let user = await this.userService.findByOpenid(guestId);
     
     if (!user) {
+      console.log(`创建新游客: ${guestId}, 昵称: ${guestNickname}`);
       user = await this.userService.create({
         openid: guestId,
         unionid: null,
         nickname: guestNickname,
         avatarUrl: 'https://via.placeholder.com/100?text=Guest',
       });
+    } else {
+      console.log(`游客已存在: ${guestId}, 昵称: ${user.nickname}`);
     }
 
     // 生成JWT token

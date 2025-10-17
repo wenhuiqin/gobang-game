@@ -180,12 +180,15 @@ class WaitingRoomScene {
     ctx.fillStyle = '#F5F5F5';
     ctx.fillRect(0, 0, this.width, this.height);
     
-    // 渐变背景
+    // 🎨 优化：深色渐变背景
     const gradient = ctx.createLinearGradient(0, 0, 0, this.height);
-    gradient.addColorStop(0, '#E3F2FD');
-    gradient.addColorStop(1, '#BBDEFB');
+    gradient.addColorStop(0, '#667eea');
+    gradient.addColorStop(1, '#764ba2');
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, this.width, this.height);
+    
+    // 🎨 添加装饰圆圈
+    this.drawDecorativeCircles();
     
     // 绘制返回按钮
     this.drawBackButton();
@@ -194,22 +197,49 @@ class WaitingRoomScene {
     this.drawShareButton();
     
     // 标题
-    ctx.fillStyle = '#1976D2';
-    ctx.font = 'bold 24px sans-serif';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 28px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('好友对战房间', this.width / 2, this.safeTop + 80);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 5;
+    ctx.fillText('好友对战', this.width / 2, this.safeTop + 80);
+    ctx.shadowBlur = 0;
     
     // 房间号卡片
-    const cardY = this.height / 2 - 100;
+    const cardY = this.height / 2 - 120;
     this.drawRoomCodeCard(cardY);
     
     // 等待状态或对手信息
     if (this.opponentJoined && this.opponent) {
-      this.drawOpponentInfo(cardY + 200);
-      this.drawCountdown(cardY + 350);
+      this.drawOpponentInfo(cardY + 220);
+      this.drawCountdown(cardY + 370);
     } else {
-      this.drawWaitingStatus(cardY + 200);
+      this.drawWaitingStatus(cardY + 220);
     }
+  }
+  
+  /**
+   * 🎨 绘制装饰圆圈
+   */
+  drawDecorativeCircles() {
+    const ctx = this.ctx;
+    
+    // 左上角大圆
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.beginPath();
+    ctx.arc(-50, this.safeTop - 50, 150, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 右下角大圆
+    ctx.beginPath();
+    ctx.arc(this.width + 50, this.height - 100, 200, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 右上角小圆
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
+    ctx.beginPath();
+    ctx.arc(this.width - 80, this.safeTop + 100, 80, 0, Math.PI * 2);
+    ctx.fill();
   }
   
   /**
@@ -255,59 +285,79 @@ class WaitingRoomScene {
   }
   
   /**
-   * 绘制房间号卡片
+   * 🎨 绘制房间号卡片
    */
   drawRoomCodeCard(y) {
     const ctx = this.ctx;
-    const cardWidth = this.width - 80;
-    const cardX = 40;
+    const cardWidth = this.width - 60;
+    const cardX = 30;
     
-    // 卡片背景
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetY = 2;
-    CanvasHelper.drawRoundRect(ctx, cardX, y, cardWidth, 140, 15);
+    // 🎨 优化：玻璃拟态卡片
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
+    ctx.shadowBlur = 20;
+    ctx.shadowOffsetY = 5;
+    CanvasHelper.drawRoundRect(ctx, cardX, y, cardWidth, 160, 20);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
     
+    // 卡片边框（玻璃反光效果）
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.lineWidth = 1.5;
+    CanvasHelper.drawRoundRect(ctx, cardX, y, cardWidth, 160, 20);
+    ctx.stroke();
+    
     // 标签
-    ctx.fillStyle = '#757575';
-    ctx.font = '14px sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.font = '15px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText('房间号', this.width / 2, y + 20);
+    ctx.fillText('房间号', this.width / 2, y + 25);
     
-    // 房间号
-    ctx.fillStyle = '#1976D2';
-    ctx.font = 'bold 48px sans-serif';
+    // 房间号（更大更醒目）
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold 56px sans-serif';
     ctx.textBaseline = 'middle';
-    ctx.fillText(this.roomCode, this.width / 2, y + 70);
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+    ctx.shadowBlur = 3;
+    ctx.fillText(this.roomCode, this.width / 2, y + 85);
+    ctx.shadowBlur = 0;
     
-    // 提示
-    ctx.fillStyle = '#9E9E9E';
-    ctx.font = '12px sans-serif';
-    ctx.fillText('点击复制', this.width / 2, y + 110);
+    // 提示图标 + 文字
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.font = '13px sans-serif';
+    ctx.fillText('📋 点击复制', this.width / 2, y + 130);
   }
   
   /**
-   * 绘制等待状态
+   * 🎨 绘制等待状态
    */
   drawWaitingStatus(y) {
     const ctx = this.ctx;
     const dotStr = '.'.repeat(this.dots);
     
-    ctx.fillStyle = '#757575';
-    ctx.font = '18px sans-serif';
+    // 等待动画圆圈
+    const circleY = y - 30;
+    for (let i = 0; i < 3; i++) {
+      const offset = Math.sin(Date.now() / 300 + i * Math.PI / 1.5) * 5;
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + Math.abs(offset) / 10})`;
+      ctx.beginPath();
+      ctx.arc(this.width / 2 - 30 + i * 30, circleY + offset, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    
+    // 等待文字
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = '20px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    ctx.fillText(`等待好友加入${dotStr}`, this.width / 2, y);
+    ctx.fillText(`等待好友加入${dotStr}`, this.width / 2, y + 10);
     
     // 提示文字
-    ctx.fillStyle = '#9E9E9E';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
     ctx.font = '14px sans-serif';
-    ctx.fillText('请分享给好友或告知房间号', this.width / 2, y + 40);
+    ctx.fillText('🎮 分享给好友或告知房间号', this.width / 2, y + 50);
   }
   
   /**

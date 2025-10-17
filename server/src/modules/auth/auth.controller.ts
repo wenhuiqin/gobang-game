@@ -17,8 +17,8 @@ export class AuthController {
    * 游客登录（开发测试用）
    */
   @Post('guest-login')
-  async guestLogin(@Body() body: { nickname?: string }) {
-    return this.authService.guestLogin(body.nickname);
+  async guestLogin(@Body() body: { deviceId?: string; nickname?: string }) {
+    return this.authService.guestLogin(body.deviceId, body.nickname);
   }
 }
 
