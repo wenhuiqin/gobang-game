@@ -424,20 +424,21 @@ class MenuScene {
       
       const { opponent, yourColor, roomCode: joinedRoomCode } = data;
       
-      // 关闭所有弹窗（包括modal）
-      try {
-        wx.hideLoading();
-        wx.hideToast();
-      } catch (e) {
-        console.log('关闭弹窗失败:', e);
-      }
-      
       const opponentName = opponent && opponent.nickname ? opponent.nickname : '对手';
-      console.log(`🎮 对手${opponentName}已加入，立即进入游戏`);
+      console.log(`🎮 对手${opponentName}已加入，准备进入游戏`);
       
-      // 立即进入游戏，不显示toast（避免延迟和modal冲突）
-      const SceneManager = require('../utils/SceneManager.js');
-      SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
+      // 关键修复：显示一个新的loading会自动关闭之前的modal
+      wx.showLoading({
+        title: '正在进入游戏...',
+        mask: true
+      });
+      
+      // 短暂延迟后进入游戏，确保modal被loading覆盖
+      setTimeout(() => {
+        wx.hideLoading();
+        const SceneManager = require('../utils/SceneManager.js');
+        SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
+      }, 300);
     };
     
     SocketClient.on('playerJoined', onPlayerJoined);
