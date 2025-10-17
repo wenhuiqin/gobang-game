@@ -307,17 +307,32 @@ export class WebSocketService implements OnModuleInit {
     // 更新Redis
     await this.redisService.set(REDIS_KEYS.GAME_ROOM(roomId), JSON.stringify(room), 7200);
 
-    // 广播给两个玩家
-    const client1 = this.clients.get(room.player1);
-    const client2 = this.clients.get(room.player2);
+    // 广播给两个玩家（确保类型一致）
+    const player1Id = String(room.player1);
+    const player2Id = String(room.player2);
+    
+    this.logger.log(`📢 准备广播moveMade: player1=${player1Id}(${typeof player1Id}), player2=${player2Id}(${typeof player2Id})`);
+    this.logger.log(`📋 当前在线客户端: ${Array.from(this.clients.keys()).join(', ')}`);
+    
+    const client1 = this.clients.get(player1Id);
+    const client2 = this.clients.get(player2Id);
+    
+    this.logger.log(`🔍 查找结果: client1=${!!client1}, client2=${!!client2}`);
 
     const moveData = { x, y, color: playerColor, nextPlayer: room.currentPlayer };
 
     if (client1) {
+      this.logger.log(`📤 发送moveMade给玩家1 (${player1Id}):`, moveData);
       this.send(client1, 'moveMade', moveData);
+    } else {
+      this.logger.error(`❌ 玩家1 (${player1Id}) WebSocket未找到`);
     }
+    
     if (client2) {
+      this.logger.log(`📤 发送moveMade给玩家2 (${player2Id}):`, moveData);
       this.send(client2, 'moveMade', moveData);
+    } else {
+      this.logger.error(`❌ 玩家2 (${player2Id}) WebSocket未找到`);
     }
   }
 

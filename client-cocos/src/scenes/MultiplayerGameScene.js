@@ -23,10 +23,10 @@ class MultiplayerGameScene {
     this.gameOver = false;
     this.winner = null;
     
-    // 房间信息
-    this.roomId = config.roomId;
-    this.userId = config.userId; // 我的userId
-    this.opponentId = config.opponentId;
+    // 房间信息（确保类型一致性）
+    this.roomId = String(config.roomId);
+    this.userId = String(config.userId); // 我的userId
+    this.opponentId = config.opponentId ? String(config.opponentId) : null;
     this.opponent = config.opponent || {}; // 对手信息：{ nickname, avatarUrl, etc }
     
     // 最后一手位置
@@ -42,7 +42,7 @@ class MultiplayerGameScene {
     console.log('  房间ID:', this.roomId, `(${typeof this.roomId})`);
     console.log('  用户ID:', this.userId, `(${typeof this.userId})`);
     console.log('  我的颜色:', this.myColor);
-    console.log('  对手ID:', this.opponentId);
+    console.log('  对手ID:', this.opponentId, `(${typeof this.opponentId})`);
     console.log('  对手信息:', this.opponent);
 
     this.bindEvents();
@@ -72,13 +72,15 @@ class MultiplayerGameScene {
       SocketClient.connect(this.config.userId, true); // 启用自动重连
     }
     
-    // 清除旧的监听器
+    // 清除旧的监听器（使用不带回调的方式清除所有监听器）
     SocketClient.off('moveMade');
     SocketClient.off('gameOver');
     SocketClient.off('error');
     SocketClient.off('boardSync');
     SocketClient.off('disconnected');
     SocketClient.off('connected');
+    
+    console.log('🔄 已清除旧的事件监听器，准备重新注册');
     
     // 监听重连成功，请求同步棋盘
     SocketClient.on('connected', () => {
@@ -119,18 +121,26 @@ class MultiplayerGameScene {
     
     // 监听对手下棋
     SocketClient.on('moveMade', (data) => {
-      console.log('📩 对手下棋:', data);
+      console.log('📩 收到下棋消息:', data);
       const { x, y, color, nextPlayer } = data;
       
-      // 防止重复下棋
-      if (this.board[x][y] !== 0) {
-        console.warn('⚠️ 该位置已有棋子，忽略');
+      // 如果是自己下的棋，因为已经乐观更新过了，所以跳过
+      if (color === this.myColor && this.board[x][y] === this.myColor) {
+        console.log('✅ 是自己的棋，已乐观更新，跳过');
         return;
       }
       
+      // 如果位置已有棋子且不是自己的颜色，说明出现了同步问题
+      if (this.board[x][y] !== 0 && this.board[x][y] !== color) {
+        console.warn('⚠️ 同步冲突，强制更新棋盘');
+      }
+      
+      // 更新棋盘（对手的棋 或 修正同步问题）
       this.board[x][y] = color;
       this.currentPlayer = nextPlayer;
       this.lastMove = { x, y };
+      
+      console.log(`📥 棋盘已更新: (${x}, ${y}) = ${color}, 下一玩家: ${nextPlayer}`);
       
       // 检查胜负
       if (this.checkWin(x, y, color)) {
@@ -256,7 +266,8 @@ class MultiplayerGameScene {
       return;
     }
 
-    console.log(`✅ 玩家下棋: (${x}, ${y})`);
+    console.log(`✅ 玩家下棋: (${x}, ${y}), 我的颜色: ${this.myColor}`);
+    console.log(`📤 发送makeMove: roomId=${this.roomId}, userId=${this.userId}, x=${x}, y=${y}`);
 
     // 发送到服务器
     SocketClient.makeMove(this.roomId, x, y);
@@ -265,6 +276,8 @@ class MultiplayerGameScene {
     this.board[x][y] = this.myColor;
     this.lastMove = { x, y };
     this.currentPlayer = this.myColor === Config.PIECE.BLACK ? Config.PIECE.WHITE : Config.PIECE.BLACK;
+    
+    console.log(`🎨 本地棋盘已更新: board[${x}][${y}] = ${this.myColor}, 下一玩家: ${this.currentPlayer}`);
 
     // 检查胜负
     if (this.checkWin(x, y, this.myColor)) {
@@ -644,11 +657,19 @@ class MultiplayerGameScene {
    * 销毁场景
    */
   destroy() {
+    console.log('🗑️ 多人对战场景销毁中...');
     this.running = false; // 停止游戏循环
     wx.offTouchStart(this.touchHandler);
+    
+    // 清除所有WebSocket监听器
     SocketClient.off('moveMade');
     SocketClient.off('gameOver');
     SocketClient.off('error');
+    SocketClient.off('boardSync');
+    SocketClient.off('disconnected');
+    SocketClient.off('connected');
+    
+    console.log('✅ 多人对战场景已销毁');
   }
 }
 

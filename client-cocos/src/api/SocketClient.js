@@ -25,10 +25,11 @@ class SocketClient {
       return;
     }
 
-    this.userId = userId;
+    // 确保userId是字符串类型，保持一致性
+    this.userId = String(userId);
     this.shouldReconnect = autoReconnect;
     
-    console.log(`📝 设置userId: ${userId}(${typeof userId})`);
+    console.log(`📝 设置userId: ${this.userId}(${typeof this.userId})`);
     
     // 清除之前的重连定时器
     if (this.reconnectTimer) {
@@ -37,7 +38,7 @@ class SocketClient {
     }
     
     // 微信小游戏使用wx.connectSocket
-    const url = `${Config.WS_BASE_URL}?userId=${userId}`;
+    const url = `${Config.WS_BASE_URL}?userId=${this.userId}`;
     console.log(`🔌 连接WebSocket (尝试 ${this.reconnectAttempts + 1}/${this.maxReconnectAttempts}):`, url);
 
     const socketTask = wx.connectSocket({
@@ -218,6 +219,7 @@ class SocketClient {
    * 加入匹配
    */
   joinMatch(rating) {
+    console.log(`📤 加入匹配队列: userId=${this.userId}(${typeof this.userId}), rating=${rating}`);
     this.send('joinMatch', { userId: this.userId, rating });
   }
 
@@ -232,15 +234,22 @@ class SocketClient {
    * 下棋
    */
   makeMove(roomId, x, y) {
-    console.log(`📤 发送makeMove: roomId=${roomId}(${typeof roomId}), userId=${this.userId}(${typeof this.userId}), x=${x}, y=${y}`);
-    this.send('makeMove', { roomId, userId: this.userId, x, y });
+    // 确保类型一致性
+    const roomIdStr = String(roomId);
+    const userIdStr = String(this.userId);
+    
+    console.log(`📤 发送makeMove: roomId=${roomIdStr}(${typeof roomIdStr}), userId=${userIdStr}(${typeof userIdStr}), x=${x}, y=${y}`);
+    this.send('makeMove', { roomId: roomIdStr, userId: userIdStr, x, y });
   }
 
   /**
    * 认输
    */
   surrender(roomId) {
-    this.send('surrender', { roomId, userId: this.userId });
+    const roomIdStr = String(roomId);
+    const userIdStr = String(this.userId);
+    console.log(`📤 发送认输: roomId=${roomIdStr}, userId=${userIdStr}`);
+    this.send('surrender', { roomId: roomIdStr, userId: userIdStr });
   }
 }
 
