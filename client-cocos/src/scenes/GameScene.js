@@ -696,6 +696,14 @@ class GameScene {
     this.currentPlayer = Config.PIECE.BLACK;
     this.lastMove = null;
     this.isAIThinking = false;
+    
+    // 如果是AI对战且AI执黑（玩家执白后手），让AI先下一子
+    if (this.config.mode === 'ai' && this.aiColor === Config.PIECE.BLACK) {
+      console.log('🤖 AI执黑，重新开始，AI先手');
+      setTimeout(() => {
+        this.aiMove();
+      }, 500);
+    }
   }
 
   /**

@@ -489,7 +489,7 @@ class MenuScene {
     ctx.fillStyle = '#90A4AE';
     ctx.font = '13px Arial';
     ctx.textAlign = 'center';
-    ctx.fillText('Version 1.0 MVP', this.width / 2, this.height - 25);
+    ctx.fillText(`Version ${Config.VERSION}`, this.width / 2, this.height - 25);
   }
   
   drawCloud(ctx, x, y, size) {

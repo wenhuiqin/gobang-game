@@ -341,7 +341,7 @@ class LoginScene {
     // 版本信息
     ctx.font = '13px Arial';
     ctx.fillStyle = '#90A4AE';
-    ctx.fillText('Version 1.0 MVP', this.width / 2, this.height - 25);
+    ctx.fillText('Version 1.0', this.width / 2, this.height - 25);
   }
   
   drawCloud(ctx, x, y, size) {
