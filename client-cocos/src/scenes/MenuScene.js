@@ -421,23 +421,33 @@ class MenuScene {
         const opponentName = opponent && opponent.nickname ? opponent.nickname : '对手';
         console.log(`🎮 对手${opponentName}已加入，准备进入游戏`);
         
-        // 关键修复：三步走强制关闭所有可能的UI
-        // 1. 先隐藏可能存在的loading/toast
+        // 关键修复：激进方案 - 多次尝试关闭UI
+        // 1. 第一次尝试
         wx.hideLoading();
         wx.hideToast();
         
-        // 2. 显示新的loading（会自动覆盖modal）
+        // 2. 立即显示新loading（尝试覆盖modal）
         wx.showLoading({
-          title: '正在进入游戏...',
+          title: '对方已加入',
           mask: true
         });
         
-        // 3. 极短延迟后进入游戏（确保loading已显示并覆盖modal）
+        // 3. 50ms后再次尝试（如果modal正在显示动画）
+        setTimeout(() => {
+          wx.hideLoading();
+          wx.hideToast();
+          wx.showLoading({
+            title: '正在进入游戏...',
+            mask: true
+          });
+        }, 50);
+        
+        // 4. 200ms后进入游戏
         setTimeout(() => {
           console.log('🚀 执行场景切换');
           const SceneManager = require('../utils/SceneManager.js');
           SceneManager.startMultiplayerGame(joinedRoomCode || roomCode, yourColor, opponent);
-        }, 150);
+        }, 200);
       });
       
       // 显示等待界面
@@ -486,33 +496,42 @@ class MenuScene {
       return;
     }
     
-    wx.showModal({
-      title: '等待对方加入',
-      content: `房间号：${roomCode}\n\n请耐心等待好友加入`,
-      showCancel: true,
-      cancelText: '取消等待',
-      confirmText: '继续等待',
-      success: (res) => {
-        // 再次检查状态（可能在对话框显示期间有人加入）
-        if (waitState.joined) {
-          console.log('✅ 已有人加入，不再处理');
-          return;
-        }
-        
-        if (!res.confirm) {
-          // 取消等待，返回菜单
-          waitState.cancelled = true;
-          SocketClient.off('playerJoined');
-          console.log('❌ 用户取消等待');
-        } else {
-          // 继续等待，递归显示
-          this.showWaitingModal(roomCode, SocketClient, waitState);
-        }
-      },
-      fail: () => {
-        console.log('⚠️ 对话框显示失败（可能已有人加入）');
+    // 🔧 关键修复：每次显示modal前，先检查是否已加入
+    // 如果在短时间内加入，直接返回不显示modal
+    setTimeout(() => {
+      if (waitState.joined || waitState.cancelled) {
+        console.log('⚠️ 在显示modal前已有人加入，取消显示');
+        return;
       }
-    });
+      
+      wx.showModal({
+        title: '等待对方加入',
+        content: `房间号：${roomCode}\n\n请耐心等待好友加入`,
+        showCancel: true,
+        cancelText: '取消等待',
+        confirmText: '继续等待',
+        success: (res) => {
+          // 再次检查状态（可能在对话框显示期间有人加入）
+          if (waitState.joined) {
+            console.log('✅ 已有人加入，不再处理');
+            return;
+          }
+          
+          if (!res.confirm) {
+            // 取消等待，返回菜单
+            waitState.cancelled = true;
+            SocketClient.off('playerJoined');
+            console.log('❌ 用户取消等待');
+          } else {
+            // 继续等待，递归显示
+            this.showWaitingModal(roomCode, SocketClient, waitState);
+          }
+        },
+        fail: () => {
+          console.log('⚠️ 对话框显示失败（可能已有人加入）');
+        }
+      });
+    }, 50); // 50ms延迟，给playerJoined事件处理时间
   }
 
   shareRoom(roomCode) {

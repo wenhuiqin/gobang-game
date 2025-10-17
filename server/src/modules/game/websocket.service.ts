@@ -262,16 +262,32 @@ export class WebSocketService implements OnModuleInit {
   private async handleMakeMove(ws: WebSocketClient, data: any) {
     const { roomId, userId, x, y } = data;
 
-    this.logger.log(`下棋: roomId=${roomId}, userId=${userId}, x=${x}, y=${y}`);
+    this.logger.log(`🎯 下棋请求: roomId=${roomId}, userId=${userId}, x=${x}, y=${y}`);
+    this.logger.log(`🔍 查找Redis key: ${REDIS_KEYS.GAME_ROOM(roomId)}`);
 
     const roomData = await this.redisService.get(REDIS_KEYS.GAME_ROOM(roomId));
     if (!roomData) {
+      this.logger.error(`❌ 房间不存在: ${REDIS_KEYS.GAME_ROOM(roomId)}`);
+      
+      // 调试：列出所有 game: 开头的 key
+      const allKeys = await this.redisService.keys('game:*');
+      this.logger.error(`📋 现有的游戏房间: ${allKeys.join(', ')}`);
+      
       this.send(ws, 'error', { message: '房间不存在' });
       return;
     }
 
     const room = JSON.parse(roomData);
-    const playerColor = room.player1 === userId ? 1 : 2;
+    this.logger.log(`🏠 找到房间: player1=${room.player1}(${typeof room.player1}), player2=${room.player2}(${typeof room.player2})`);
+    this.logger.log(`👤 当前用户: userId=${userId}(${typeof userId})`);
+    
+    // 🔧 关键修复：确保类型一致（string vs number）
+    const userIdStr = String(userId);
+    const player1Str = String(room.player1);
+    const player2Str = String(room.player2);
+    
+    const playerColor = player1Str === userIdStr ? 1 : 2;
+    this.logger.log(`🎨 玩家颜色: ${playerColor} (player1=${player1Str}, player2=${player2Str}, userId=${userIdStr})`);
 
     if (room.currentPlayer !== playerColor) {
       this.send(ws, 'error', { message: '还没轮到你' });
@@ -319,8 +335,15 @@ export class WebSocketService implements OnModuleInit {
     }
 
     const room = JSON.parse(roomData);
-    const winnerColor = room.player1 === userId ? 2 : 1;
+    
+    // 🔧 关键修复：确保类型一致
+    const userIdStr = String(userId);
+    const player1Str = String(room.player1);
+    
+    const winnerColor = player1Str === userIdStr ? 2 : 1;
     const winnerId = winnerColor === 1 ? room.player1 : room.player2;
+    
+    this.logger.log(`🏳️ 用户 ${userId} 认输，获胜者: ${winnerId}`);
 
     await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
 
@@ -397,24 +420,36 @@ export class WebSocketService implements OnModuleInit {
    */
   private async notifyOpponentOnDisconnect(userId: string) {
     try {
+      this.logger.log(`🔍 查找用户 ${userId} 的游戏房间`);
+      
       // 遍历所有游戏房间，查找包含该userId的房间
-      const keys = await this.redisService.keys('game_room:*');
+      // 修复：正确的Redis key模式是 game:*:room，而不是 game_room:*
+      const keys = await this.redisService.keys('game:*:room');
+      this.logger.log(`📋 找到 ${keys.length} 个游戏房间:`, keys);
       
       for (const key of keys) {
         const roomData = await this.redisService.get(key);
         if (!roomData) continue;
         
         const room = JSON.parse(roomData);
+        this.logger.log(`🔍 检查房间 ${room.roomId}: player1=${room.player1}, player2=${room.player2}, 断线用户=${userId}`);
+        
         let opponentId = null;
         let winnerId = null;
         
-        // 判断断线的是哪一方
-        if (room.player1 === userId) {
+        // 判断断线的是哪一方（确保类型一致）
+        const userIdStr = String(userId);
+        const player1Str = String(room.player1);
+        const player2Str = String(room.player2);
+        
+        if (player1Str === userIdStr) {
           opponentId = room.player2;
           winnerId = room.player2; // 对方获胜
-        } else if (room.player2 === userId) {
+          this.logger.log(`✅ 匹配成功: ${userId} 是 player1，对手是 ${opponentId}`);
+        } else if (player2Str === userIdStr) {
           opponentId = room.player1;
           winnerId = room.player1; // 对方获胜
+          this.logger.log(`✅ 匹配成功: ${userId} 是 player2，对手是 ${opponentId}`);
         }
         
         // 如果找到对手，通知对手
