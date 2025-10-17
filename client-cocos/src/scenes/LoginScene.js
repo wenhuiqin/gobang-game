@@ -118,10 +118,21 @@ class LoginScene {
         console.log('⚠️ 微信登录失败，降级为游客登录:', error.message || error);
 
         try {
-          // 🔧 生成设备唯一ID（使用系统信息）
+          // 🔧 生成设备唯一ID（使用系统信息 + 固定随机种子）
           const systemInfo = wx.getSystemInfoSync();
-          const deviceId = `guest_${systemInfo.model}_${systemInfo.system}_${systemInfo.platform}`.replace(/\s+/g, '_');
-          console.log('📱 设备ID:', deviceId);
+          
+          // 尝试从缓存读取deviceId，如果不存在则生成新的
+          let deviceId = wx.getStorageSync('deviceId');
+          if (!deviceId) {
+            // 使用多个系统信息组合生成唯一ID
+            const uniqueStr = `${systemInfo.model}_${systemInfo.system}_${systemInfo.platform}_${systemInfo.brand}_${Date.now()}`.replace(/\s+/g, '_');
+            deviceId = `guest_${uniqueStr}`;
+            // 保存到缓存，确保同一设备始终使用同一ID
+            wx.setStorageSync('deviceId', deviceId);
+            console.log('📱 新设备ID已生成:', deviceId);
+          } else {
+            console.log('📱 使用缓存的设备ID:', deviceId);
+          }
           
           const response = await HttpClient.post('/auth/guest-login', {
             deviceId: deviceId,

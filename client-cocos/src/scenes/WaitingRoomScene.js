@@ -96,26 +96,33 @@ class WaitingRoomScene {
    * 处理触摸
    */
   handleTouch(x, y) {
-    // 房间号区域（点击复制）
-    const roomCodeY = this.height / 2 - 80;
-    if (y >= roomCodeY && y <= roomCodeY + 100) {
-      this.copyRoomCode();
+    const size = 44;
+    
+    // 返回按钮（圆形区域）
+    const backBtnX = 20 + size / 2;
+    const backBtnY = this.safeTop + 20 + size / 2;
+    const backDist = Math.sqrt((x - backBtnX) ** 2 + (y - backBtnY) ** 2);
+    if (backDist <= size / 2) {
+      this.goBack();
       return;
     }
     
-    // 分享按钮（右上角）
-    const shareBtn = { x: this.width - 100, y: this.safeTop + 20, width: 80, height: 40 };
-    if (x >= shareBtn.x && x <= shareBtn.x + shareBtn.width &&
-        y >= shareBtn.y && y <= shareBtn.y + shareBtn.height) {
+    // 分享按钮（圆形区域）
+    const shareBtnX = this.width - size - 20 + size / 2;
+    const shareBtnY = this.safeTop + 20 + size / 2;
+    const shareDist = Math.sqrt((x - shareBtnX) ** 2 + (y - shareBtnY) ** 2);
+    if (shareDist <= size / 2) {
       this.shareRoom();
       return;
     }
     
-    // 返回按钮（左上角）
-    const backBtn = { x: 20, y: this.safeTop + 20, width: 80, height: 40 };
-    if (x >= backBtn.x && x <= backBtn.x + backBtn.width &&
-        y >= backBtn.y && y <= backBtn.y + backBtn.height) {
-      this.goBack();
+    // 房间号卡片区域（点击复制）
+    const cardY = this.height / 2 - 120;
+    const cardWidth = this.width - 60;
+    const cardX = 30;
+    if (x >= cardX && x <= cardX + cardWidth &&
+        y >= cardY && y <= cardY + 160) {
+      this.copyRoomCode();
       return;
     }
   }
@@ -177,33 +184,33 @@ class WaitingRoomScene {
     const ctx = this.ctx;
     
     // 清空画布
-    ctx.fillStyle = '#F5F5F5';
+    ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, this.width, this.height);
     
-    // 🎨 优化：深色渐变背景
+    // 🎨 天空蓝渐变背景（和登录页一致）
     const gradient = ctx.createLinearGradient(0, 0, 0, this.height);
-    gradient.addColorStop(0, '#667eea');
-    gradient.addColorStop(1, '#764ba2');
+    gradient.addColorStop(0, '#E3F2FD');  // 淡天空蓝
+    gradient.addColorStop(0.5, '#BBDEFB'); // 天空蓝
+    gradient.addColorStop(1, '#90CAF9');   // 亮天空蓝
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, this.width, this.height);
     
-    // 🎨 添加装饰圆圈
-    this.drawDecorativeCircles();
+    // 🎨 装饰云朵
+    this.drawCloud(ctx, this.width * 0.2, this.safeTop + 60, 50);
+    this.drawCloud(ctx, this.width * 0.8, this.safeTop + 120, 40);
+    this.drawCloud(ctx, this.width * 0.5, this.height * 0.7, 45);
     
-    // 绘制返回按钮
+    // 绘制返回按钮（图标）
     this.drawBackButton();
     
-    // 绘制分享按钮
+    // 绘制分享按钮（图标）
     this.drawShareButton();
     
     // 标题
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = '#1976D2';
     ctx.font = 'bold 28px sans-serif';
     ctx.textAlign = 'center';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.shadowBlur = 5;
     ctx.fillText('好友对战', this.width / 2, this.safeTop + 80);
-    ctx.shadowBlur = 0;
     
     // 房间号卡片
     const cardY = this.height / 2 - 120;
@@ -219,69 +226,109 @@ class WaitingRoomScene {
   }
   
   /**
-   * 🎨 绘制装饰圆圈
+   * 🎨 绘制云朵
    */
-  drawDecorativeCircles() {
-    const ctx = this.ctx;
-    
-    // 左上角大圆
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+  drawCloud(ctx, x, y, size) {
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
     ctx.beginPath();
-    ctx.arc(-50, this.safeTop - 50, 150, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 右下角大圆
-    ctx.beginPath();
-    ctx.arc(this.width + 50, this.height - 100, 200, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // 右上角小圆
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.beginPath();
-    ctx.arc(this.width - 80, this.safeTop + 100, 80, 0, Math.PI * 2);
+    ctx.arc(x, y, size, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.6, y, size * 0.8, 0, Math.PI * 2);
+    ctx.arc(x + size * 1.2, y, size * 0.6, 0, Math.PI * 2);
     ctx.fill();
   }
   
   /**
-   * 绘制返回按钮
+   * 🎨 绘制返回按钮（简约左箭头图标）
    */
   drawBackButton() {
     const ctx = this.ctx;
     const x = 20;
     const y = this.safeTop + 20;
+    const size = 44;
     
-    // 按钮背景
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    CanvasHelper.drawRoundRect(ctx, x, y, 80, 40, 20);
+    // 圆形背景
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
     
-    // 文字
-    ctx.fillStyle = '#1976D2';
-    ctx.font = '16px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('< 返回', x + 40, y + 20);
+    // 绘制左箭头（简约线条）
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    
+    ctx.strokeStyle = '#1976D2';
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    ctx.beginPath();
+    // 箭头左边线
+    ctx.moveTo(centerX - 2, centerY - 8);
+    ctx.lineTo(centerX - 10, centerY);
+    ctx.lineTo(centerX - 2, centerY + 8);
+    // 箭头横线
+    ctx.moveTo(centerX - 10, centerY);
+    ctx.lineTo(centerX + 8, centerY);
+    ctx.stroke();
   }
   
   /**
-   * 绘制分享按钮
+   * 🎨 绘制分享按钮（简约分享图标）
    */
   drawShareButton() {
     const ctx = this.ctx;
-    const x = this.width - 100;
+    const size = 44;
+    const x = this.width - size - 20;
     const y = this.safeTop + 20;
     
-    // 按钮背景
-    ctx.fillStyle = 'rgba(25, 118, 210, 0.9)';
-    CanvasHelper.drawRoundRect(ctx, x, y, 80, 40, 20);
+    // 圆形背景
+    ctx.fillStyle = '#1976D2';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)';
+    ctx.shadowBlur = 8;
+    ctx.shadowOffsetY = 2;
+    ctx.beginPath();
+    ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2);
     ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetY = 0;
     
-    // 文字
+    // 绘制分享图标（向右上箭头）
+    const centerX = x + size / 2;
+    const centerY = y + size / 2;
+    
+    ctx.strokeStyle = '#FFFFFF';
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = '16px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('分享', x + 40, y + 20);
+    ctx.lineWidth = 2.5;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    
+    // 箭头
+    ctx.beginPath();
+    ctx.moveTo(centerX + 8, centerY - 8);
+    ctx.lineTo(centerX - 2, centerY - 8);
+    ctx.lineTo(centerX - 2, centerY + 2);
+    ctx.stroke();
+    
+    // 箭头尖
+    ctx.beginPath();
+    ctx.moveTo(centerX + 8, centerY - 8);
+    ctx.lineTo(centerX + 8, centerY - 2);
+    ctx.moveTo(centerX + 8, centerY - 8);
+    ctx.lineTo(centerX + 2, centerY - 8);
+    ctx.stroke();
+    
+    // 下方两个点（表示分享给多人）
+    ctx.beginPath();
+    ctx.arc(centerX - 6, centerY + 6, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(centerX + 2, centerY + 6, 2.5, 0, Math.PI * 2);
+    ctx.fill();
   }
   
   /**
@@ -292,40 +339,31 @@ class WaitingRoomScene {
     const cardWidth = this.width - 60;
     const cardX = 30;
     
-    // 🎨 优化：玻璃拟态卡片
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.2)';
-    ctx.shadowBlur = 20;
-    ctx.shadowOffsetY = 5;
+    // 白色卡片背景
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetY = 3;
     CanvasHelper.drawRoundRect(ctx, cardX, y, cardWidth, 160, 20);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
     
-    // 卡片边框（玻璃反光效果）
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.lineWidth = 1.5;
-    CanvasHelper.drawRoundRect(ctx, cardX, y, cardWidth, 160, 20);
-    ctx.stroke();
-    
     // 标签
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.fillStyle = '#757575';
     ctx.font = '15px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText('房间号', this.width / 2, y + 25);
     
-    // 房间号（更大更醒目）
-    ctx.fillStyle = '#FFFFFF';
+    // 房间号（深蓝色）
+    ctx.fillStyle = '#1976D2';
     ctx.font = 'bold 56px sans-serif';
     ctx.textBaseline = 'middle';
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
-    ctx.shadowBlur = 3;
     ctx.fillText(this.roomCode, this.width / 2, y + 85);
-    ctx.shadowBlur = 0;
     
-    // 提示图标 + 文字
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    // 提示
+    ctx.fillStyle = '#9E9E9E';
     ctx.font = '13px sans-serif';
     ctx.fillText('📋 点击复制', this.width / 2, y + 130);
   }
@@ -337,25 +375,25 @@ class WaitingRoomScene {
     const ctx = this.ctx;
     const dotStr = '.'.repeat(this.dots);
     
-    // 等待动画圆圈
+    // 等待动画圆圈（蓝色）
     const circleY = y - 30;
     for (let i = 0; i < 3; i++) {
       const offset = Math.sin(Date.now() / 300 + i * Math.PI / 1.5) * 5;
-      ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + Math.abs(offset) / 10})`;
+      ctx.fillStyle = `rgba(25, 118, 210, ${0.3 + Math.abs(offset) / 15})`;
       ctx.beginPath();
       ctx.arc(this.width / 2 - 30 + i * 30, circleY + offset, 8, 0, Math.PI * 2);
       ctx.fill();
     }
     
     // 等待文字
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = '#424242';
     ctx.font = '20px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
     ctx.fillText(`等待好友加入${dotStr}`, this.width / 2, y + 10);
     
     // 提示文字
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.fillStyle = '#757575';
     ctx.font = '14px sans-serif';
     ctx.fillText('🎮 分享给好友或告知房间号', this.width / 2, y + 50);
   }
