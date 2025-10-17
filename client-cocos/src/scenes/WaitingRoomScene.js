@@ -1,5 +1,6 @@
 const Config = require('../utils/Config.js');
 const CanvasHelper = require('../utils/CanvasHelper.js');
+const SocketClient = require('../api/SocketClient.js');
 
 /**
  * 等候房间场景
@@ -33,7 +34,51 @@ class WaitingRoomScene {
     console.log('🏠 等候房间场景初始化:', this.roomCode);
     
     this.bindEvents();
+    this.setupWebSocket();
     this.startDotsAnimation();
+    
+    // 启动游戏循环
+    this.running = true;
+    this.gameLoop();
+  }
+  
+  /**
+   * 游戏循环
+   */
+  gameLoop() {
+    if (!this.running) return;
+    
+    this.render();
+    requestAnimationFrame(() => this.gameLoop());
+  }
+  
+  /**
+   * 设置WebSocket监听
+   */
+  setupWebSocket() {
+    // 确保WebSocket已连接
+    if (!SocketClient.connected) {
+      const userId = wx.getStorageSync('userInfo')?.id;
+      if (userId) {
+        SocketClient.connect(userId, true);
+      }
+    }
+    
+    // 清除旧的监听器
+    SocketClient.off('playerJoined');
+    
+    // 监听好友加入
+    SocketClient.on('playerJoined', (data) => {
+      console.log('🎉 收到playerJoined事件:', data);
+      const { opponent, yourColor } = data;
+      
+      if (opponent) {
+        // 调用好友加入处理
+        this.onOpponentJoin(opponent);
+      }
+    });
+    
+    console.log('✅ WebSocket监听已设置，等待好友加入...');
   }
   
   /**
@@ -440,6 +485,8 @@ class WaitingRoomScene {
    * 销毁
    */
   destroy() {
+    this.running = false; // 停止游戏循环
+    
     if (this.touchHandler) {
       wx.offTouchStart(this.touchHandler);
       this.touchHandler = null;
@@ -449,6 +496,9 @@ class WaitingRoomScene {
       clearInterval(this.dotsTimer);
       this.dotsTimer = null;
     }
+    
+    // 清除WebSocket监听
+    SocketClient.off('playerJoined');
   }
 }
 
