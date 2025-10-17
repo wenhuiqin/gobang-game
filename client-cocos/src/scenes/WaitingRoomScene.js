@@ -222,7 +222,7 @@ class WaitingRoomScene {
     
     // 按钮背景
     ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-    CanvasHelper.roundRect(ctx, x, y, 80, 40, 20);
+    CanvasHelper.drawRoundRect(ctx, x, y, 80, 40, 20);
     ctx.fill();
     
     // 文字
@@ -243,7 +243,7 @@ class WaitingRoomScene {
     
     // 按钮背景
     ctx.fillStyle = 'rgba(25, 118, 210, 0.9)';
-    CanvasHelper.roundRect(ctx, x, y, 80, 40, 20);
+    CanvasHelper.drawRoundRect(ctx, x, y, 80, 40, 20);
     ctx.fill();
     
     // 文字
@@ -267,7 +267,7 @@ class WaitingRoomScene {
     ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
     ctx.shadowBlur = 10;
     ctx.shadowOffsetY = 2;
-    CanvasHelper.roundRect(ctx, cardX, y, cardWidth, 140, 15);
+    CanvasHelper.drawRoundRect(ctx, cardX, y, cardWidth, 140, 15);
     ctx.fill();
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
