@@ -22,6 +22,7 @@ class MultiplayerGameScene {
     this.myColor = config.myColor || Config.PIECE.BLACK;
     this.gameOver = false;
     this.winner = null;
+    this.winningLine = null; // 获胜连线 [{x, y}, {x, y}, ...]
     
     // 房间信息（确保类型一致性）
     this.roomId = String(config.roomId);
@@ -215,18 +216,22 @@ class MultiplayerGameScene {
         message = isWinner ? '恭喜获胜！' : '再接再厉！';
       }
       
-      wx.showModal({
-        title: title,
-        content: message,
-        showCancel: true,
-        confirmText: '返回菜单',
-        cancelText: '查看棋局',
-        success: (res) => {
-          if (res.confirm) {
-            this.returnToMenu();
-          }
-        },
-      });
+      // 先显示获胜连线（延迟500ms让玩家看到连线）
+      setTimeout(() => {
+        wx.showModal({
+          title: title,
+          content: message,
+          showCancel: true,
+          confirmText: '返回菜单',
+          cancelText: '查看棋局',
+          success: (res) => {
+            if (res.confirm) {
+              this.returnToMenu();
+            }
+            // res.cancel 时不做任何操作，保留当前棋局和获胜连线
+          },
+        });
+      }, 500); // 延迟500ms再显示弹窗
     });
 
     // 监听错误
@@ -272,7 +277,9 @@ class MultiplayerGameScene {
       }
     }
 
+    // 如果游戏已结束，禁止下棋
     if (this.gameOver) {
+      console.log('❌ 游戏已结束，无法下棋');
       return;
     }
 
@@ -361,36 +368,41 @@ class MultiplayerGameScene {
     ];
 
     for (const [dx, dy] of directions) {
-      let count = 1;
+      const line = [{ x, y }]; // 起始点
       
-      // 正向
-      let i = 1;
-      while (
-        x + i * dx >= 0 && x + i * dx < Config.BOARD_SIZE &&
-        y + i * dy >= 0 && y + i * dy < Config.BOARD_SIZE &&
-        this.board[x + i * dx][y + i * dy] === color
-      ) {
-        count++;
-        i++;
-      }
+      // 正向收集棋子
+      const forward = this.collectDirection(x, y, dx, dy, color);
+      // 反向收集棋子
+      const backward = this.collectDirection(x, y, -dx, -dy, color);
       
-      // 反向
-      i = 1;
-      while (
-        x - i * dx >= 0 && x - i * dx < Config.BOARD_SIZE &&
-        y - i * dy >= 0 && y - i * dy < Config.BOARD_SIZE &&
-        this.board[x - i * dx][y - i * dy] === color
-      ) {
-        count++;
-        i++;
-      }
-
-      if (count >= Config.WIN_COUNT) {
+      // 合并三个数组：backward（反向）+ 起始点 + forward（正向）
+      const fullLine = [...backward.reverse(), ...line, ...forward];
+      
+      if (fullLine.length >= Config.WIN_COUNT) {
+        // 保存获胜连线（只取前5个棋子）
+        this.winningLine = fullLine.slice(0, Config.WIN_COUNT);
         return true;
       }
     }
 
     return false;
+  }
+
+  /**
+   * 收集某个方向的连续同色棋子
+   */
+  collectDirection(x, y, dx, dy, color) {
+    const pieces = [];
+    let i = 1;
+    while (
+      x + i * dx >= 0 && x + i * dx < Config.BOARD_SIZE &&
+      y + i * dy >= 0 && y + i * dy < Config.BOARD_SIZE &&
+      this.board[x + i * dx][y + i * dy] === color
+    ) {
+      pieces.push({ x: x + i * dx, y: y + i * dy });
+      i++;
+    }
+    return pieces;
   }
 
   /**
@@ -402,18 +414,22 @@ class MultiplayerGameScene {
 
     const isMyWin = winnerColor === this.myColor;
 
-    wx.showModal({
-      title: isMyWin ? '你赢了！🎉' : '你输了！',
-      content: isMyWin ? '恭喜获胜！' : '再接再厉！',
-      showCancel: true,
-      confirmText: '返回菜单',
-      cancelText: '查看棋局',
-      success: (res) => {
-        if (res.confirm) {
-          this.returnToMenu();
-        }
-      },
-    });
+    // 先显示获胜连线（延迟500ms让玩家看到连线）
+    setTimeout(() => {
+      wx.showModal({
+        title: isMyWin ? '你赢了！🎉' : '你输了！',
+        content: isMyWin ? '恭喜获胜！' : '再接再厉！',
+        showCancel: true,
+        confirmText: '返回菜单',
+        cancelText: '查看棋局',
+        success: (res) => {
+          if (res.confirm) {
+            this.returnToMenu();
+          }
+          // res.cancel 时不做任何操作，保留当前棋局和获胜连线
+        },
+      });
+    }, 500); // 延迟500ms再显示弹窗
   }
 
   /**
@@ -451,6 +467,11 @@ class MultiplayerGameScene {
 
     // 绘制棋子
     this.drawPieces();
+    
+    // 绘制获胜连线（如果有）
+    if (this.winningLine && this.winningLine.length > 0) {
+      this.drawWinningLine();
+    }
   }
 
   /**
@@ -876,6 +897,44 @@ class MultiplayerGameScene {
     ctx.lineTo(centerX - 2, centerY + 6);
     ctx.stroke();
 
+    ctx.restore();
+  }
+
+  /**
+   * 绘制获胜连线
+   */
+  drawWinningLine() {
+    if (!this.winningLine || this.winningLine.length < 2) return;
+    
+    const ctx = this.ctx;
+    ctx.save();
+    
+    // 绘制一条粗红线连接获胜的五个棋子
+    ctx.strokeStyle = '#FF0000';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    
+    // 添加发光效果
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 10;
+    
+    ctx.beginPath();
+    
+    // 起始点（注意：多人游戏棋盘是row,col，与单人游戏x,y相反）
+    const startPiece = this.winningLine[0];
+    const startX = this.offsetX + startPiece.y * this.cellSize;
+    const startY = this.offsetY + startPiece.x * this.cellSize;
+    ctx.moveTo(startX, startY);
+    
+    // 连接所有获胜的棋子
+    for (let i = 1; i < this.winningLine.length; i++) {
+      const piece = this.winningLine[i];
+      const x = this.offsetX + piece.y * this.cellSize;
+      const y = this.offsetY + piece.x * this.cellSize;
+      ctx.lineTo(x, y);
+    }
+    
+    ctx.stroke();
     ctx.restore();
   }
 

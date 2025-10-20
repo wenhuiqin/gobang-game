@@ -24,7 +24,38 @@ class MenuScene {
       { id: 'rank', name: '🏆 排行榜', desc: '查看高手榜单' },
     ];
     
+    // 头像缓存
+    this.avatarImages = {};
+    this.loadingAvatars = {};
+    
+    // 预加载用户头像
+    if (userInfo && userInfo.avatarUrl) {
+      this.loadAvatar(userInfo.avatarUrl);
+    }
+    
     this.bindEvents();
+  }
+
+  /**
+   * 加载头像图片
+   */
+  loadAvatar(url) {
+    if (!url || this.avatarImages[url]) return;
+    
+    if (this.loadingAvatars[url]) return; // 正在加载
+    
+    this.loadingAvatars[url] = true;
+    const img = wx.createImage();
+    img.onload = () => {
+      this.avatarImages[url] = img;
+      delete this.loadingAvatars[url];
+      // 头像加载完成后自动触发重新渲染
+    };
+    img.onerror = () => {
+      console.error('头像加载失败:', url);
+      delete this.loadingAvatars[url];
+    };
+    img.src = url;
   }
 
   bindEvents() {
@@ -505,20 +536,71 @@ class MenuScene {
     // 退出登录按钮（右上角）
     this.drawLogoutButton(ctx, cardX + cardW - 35, cardY + 10);
     
-    // 用户信息
+    // 绘制头像 + 用户信息
+    const avatarSize = 50;
+    const avatarX = cardX + 15 + avatarSize / 2;
+    const avatarY = cardY + cardH / 2;
+    
+    // 绘制圆形头像
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    
+    const avatarUrl = this.userInfo.avatarUrl || this.userInfo.avatar_url;
+    if (avatarUrl && this.avatarImages[avatarUrl]) {
+      // 绘制头像图片
+      const img = this.avatarImages[avatarUrl];
+      ctx.drawImage(img, avatarX - avatarSize / 2, avatarY - avatarSize / 2, avatarSize, avatarSize);
+    } else {
+      // 绘制占位符（渐变背景 + 首字母）
+      const gradient = ctx.createRadialGradient(avatarX, avatarY, 0, avatarX, avatarY, avatarSize / 2);
+      gradient.addColorStop(0, '#42A5F5');
+      gradient.addColorStop(1, '#1976D2');
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // 显示昵称首字母
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const firstChar = (this.userInfo.nickname || '游客')[0].toUpperCase();
+      ctx.fillText(firstChar, avatarX, avatarY);
+      
+      // 触发头像加载（如果还未加载）
+      if (avatarUrl && !this.loadingAvatars[avatarUrl]) {
+        this.loadAvatar(avatarUrl);
+      }
+    }
+    ctx.restore();
+    
+    // 头像边框
+    ctx.strokeStyle = '#1976D2';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // 用户信息（昵称和战绩，显示在头像右侧）
+    const textX = avatarX + avatarSize / 2 + 10;
+    
     ctx.font = 'bold 19px Arial';
     ctx.fillStyle = '#1976D2';
-    ctx.textAlign = 'center';
-    ctx.fillText(`欢迎, ${this.userInfo.nickname}`, this.width / 2, cardY + 25);
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(`欢迎, ${this.userInfo.nickname}`, textX, cardY + 15);
     
     // 更新昵称按钮（昵称旁边的刷新图标）
-    this.drawRefreshButton(ctx, this.width / 2 + 60, cardY + 15);
+    const nicknameWidth = ctx.measureText(`欢迎, ${this.userInfo.nickname}`).width;
+    this.drawRefreshButton(ctx, textX + nicknameWidth + 5, cardY + 15);
     
     ctx.font = '15px Arial';
     ctx.fillStyle = '#757575';
     const games = this.userInfo.totalGames || 0;
     const wins = this.userInfo.winGames || 0;
-    ctx.fillText(`战绩: ${games}局 胜${wins}局`, this.width / 2, cardY + 48);
+    ctx.fillText(`战绩: ${games}局 胜${wins}局`, textX, cardY + 42);
     
     // 绘制菜单项
     const startY = safeTop + 220;

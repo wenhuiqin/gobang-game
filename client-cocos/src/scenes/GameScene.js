@@ -29,6 +29,8 @@ class GameScene {
     this.userId = null;
     this.lastMove = null;
     this.isAIThinking = false; // 防止AI重复思考
+    this.gameOver = false; // 游戏是否结束
+    this.winningLine = null; // 获胜连线 [{x, y}, {x, y}, ...]
     
     // 返回按钮区域
     this.backButton = null;
@@ -115,6 +117,12 @@ class GameScene {
       }
     }
     
+    // 如果游戏已结束，禁止下棋
+    if (this.gameOver) {
+      console.log('❌ 游戏已结束，无法下棋');
+      return;
+    }
+    
     // 如果AI正在思考，忽略玩家操作
     if (this.isAIThinking) {
       return;
@@ -189,6 +197,7 @@ class GameScene {
     // 检查胜利
     if (this.checkWin(x, y)) {
       this.isAIThinking = false; // 重置AI思考状态
+      this.gameOver = true; // 设置游戏结束标志
       
       // 如果是人机对战，记录结果
       if (this.config.mode === 'ai') {
@@ -196,6 +205,7 @@ class GameScene {
         this.recordGameResult(playerWon);
       }
       
+      // 先显示获胜连线（延迟500ms让玩家看到连线）
       setTimeout(() => {
         wx.showModal({
           title: '🎉 游戏结束',
@@ -207,10 +217,10 @@ class GameScene {
             if (res.confirm) {
               this.reset();
             }
-            // res.cancel 时不做任何操作，保留当前棋局
+            // res.cancel 时不做任何操作，保留当前棋局和获胜连线
           },
         });
-      }, 300);
+      }, 500); // 延迟500ms再显示弹窗
       return;
     }
     
@@ -321,12 +331,14 @@ class GameScene {
         // 检查AI是否获胜
         if (this.checkWin(x, y)) {
           this.isAIThinking = false;
+          this.gameOver = true; // 设置游戏结束标志
           
           // 记录游戏结果（AI获胜，玩家失败）
           this.recordGameResult(false);
           
           const aiColorIcon = this.aiColor === Config.PIECE.BLACK ? '⚫' : '⚪';
           const aiColorText = this.aiColor === Config.PIECE.BLACK ? '黑方' : '白方';
+          // 先显示获胜连线（延迟500ms让玩家看到连线）
           setTimeout(() => {
             wx.showModal({
               title: '🎉 游戏结束',
@@ -338,10 +350,10 @@ class GameScene {
                 if (res.confirm) {
                   this.reset();
                 }
-                // res.cancel 时不做任何操作，保留当前棋局
+                // res.cancel 时不做任何操作，保留当前棋局和获胜连线
               },
             });
-          }, 300);
+          }, 500); // 延迟500ms再显示弹窗
           return;
         }
         
@@ -401,12 +413,39 @@ class GameScene {
     ];
 
     for (const [dir1, dir2] of directions) {
-      let count = 1;
-      count += this.countDirection(x, y, dir1[0], dir1[1], color);
-      count += this.countDirection(x, y, dir2[0], dir2[1], color);
-      if (count >= Config.WIN_COUNT) return true;
+      const line = [{ x, y }]; // 起始点
+      
+      // 正向收集棋子
+      const forward = this.collectDirection(x, y, dir1[0], dir1[1], color);
+      // 反向收集棋子
+      const backward = this.collectDirection(x, y, dir2[0], dir2[1], color);
+      
+      // 合并三个数组：backward（反向）+ 起始点 + forward（正向）
+      const fullLine = [...backward.reverse(), ...line, ...forward];
+      
+      if (fullLine.length >= Config.WIN_COUNT) {
+        // 保存获胜连线（只取前5个棋子）
+        this.winningLine = fullLine.slice(0, Config.WIN_COUNT);
+        return true;
+      }
     }
     return false;
+  }
+
+  /**
+   * 收集某个方向的连续同色棋子
+   */
+  collectDirection(x, y, dx, dy, color) {
+    const pieces = [];
+    let nx = x + dx, ny = y + dy;
+    while (nx >= 0 && nx < Config.BOARD_SIZE && 
+           ny >= 0 && ny < Config.BOARD_SIZE && 
+           this.board[nx][ny] === color) {
+      pieces.push({ x: nx, y: ny });
+      nx += dx;
+      ny += dy;
+    }
+    return pieces;
   }
 
   countDirection(x, y, dx, dy, color) {
@@ -499,6 +538,11 @@ class GameScene {
     
     // 绘制棋子
     this.drawPieces();
+    
+    // 绘制获胜连线（如果有）
+    if (this.winningLine && this.winningLine.length > 0) {
+      this.drawWinningLine();
+    }
     
     // 绘制状态栏
     this.drawStatusBar(windowWidth, windowHeight);
@@ -786,12 +830,52 @@ class GameScene {
     }
   }
 
+  /**
+   * 绘制获胜连线
+   */
+  drawWinningLine() {
+    if (!this.winningLine || this.winningLine.length < 2) return;
+    
+    const ctx = this.ctx;
+    ctx.save();
+    
+    // 绘制一条粗红线连接获胜的五个棋子
+    ctx.strokeStyle = '#FF0000';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    
+    // 添加发光效果
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 10;
+    
+    ctx.beginPath();
+    
+    // 起始点
+    const startPiece = this.winningLine[0];
+    const startX = this.offsetX + startPiece.x * this.cellSize;
+    const startY = this.offsetY + startPiece.y * this.cellSize;
+    ctx.moveTo(startX, startY);
+    
+    // 连接所有获胜的棋子
+    for (let i = 1; i < this.winningLine.length; i++) {
+      const piece = this.winningLine[i];
+      const x = this.offsetX + piece.x * this.cellSize;
+      const y = this.offsetY + piece.y * this.cellSize;
+      ctx.lineTo(x, y);
+    }
+    
+    ctx.stroke();
+    ctx.restore();
+  }
+
   reset() {
     this.board = this.initBoard();
     this.currentPlayer = Config.PIECE.BLACK;
     this.lastMove = null;
     this.isAIThinking = false;
     this.previewPosition = null; // 清除预览
+    this.gameOver = false; // 重置游戏结束标志
+    this.winningLine = null; // 清除获胜连线
     
     // 如果是AI对战且AI执黑（玩家执白后手），让AI先下一子
     if (this.config.mode === 'ai' && this.aiColor === Config.PIECE.BLACK) {
