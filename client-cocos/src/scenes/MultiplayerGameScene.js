@@ -32,6 +32,9 @@ class MultiplayerGameScene {
     // 最后一手位置
     this.lastMove = null;
     
+    // 点击预览状态
+    this.previewPosition = null; // 预览位置 {x, y}
+    
     // 返回按钮区域
     this.backButton = null;
 
@@ -123,6 +126,9 @@ class MultiplayerGameScene {
     SocketClient.on('moveMade', (data) => {
       console.log('📩 收到下棋消息:', data);
       const { x, y, color, nextPlayer } = data;
+      
+      // 清除预览（无论是谁的棋）
+      this.previewPosition = null;
       
       // 如果是自己下的棋，因为已经乐观更新过了，所以跳过
       if (color === this.myColor && this.board[x][y] === this.myColor) {
@@ -253,7 +259,30 @@ class MultiplayerGameScene {
     const row = Math.round((y - boardY) / cellSize);
 
     if (col >= 0 && col < Config.BOARD_SIZE && row >= 0 && row < Config.BOARD_SIZE) {
-      this.placePiece(row, col);
+      // 检查位置是否为空
+      if (this.board[row][col] !== 0) {
+        console.log('❌ 该位置已有棋子');
+        return;
+      }
+      
+      // 双击确认逻辑
+      if (this.previewPosition && 
+          this.previewPosition.x === row && 
+          this.previewPosition.y === col) {
+        // 第二次点击同一位置，确认下棋
+        console.log(`✅ 确认下棋: (${row}, ${col})`);
+        this.previewPosition = null; // 清除预览
+        this.placePiece(row, col);
+      } else {
+        // 第一次点击或点击不同位置，显示预览
+        console.log(`👆 预览位置: (${row}, ${col})`);
+        this.previewPosition = { x: row, y: col };
+        
+        // 震动反馈
+        wx.vibrateShort({
+          type: 'light'
+        });
+      }
     }
   }
 
@@ -488,12 +517,20 @@ class MultiplayerGameScene {
     const ctx = this.ctx;
     const { windowWidth, windowHeight } = wx.getSystemInfoSync();
 
-    const boardSize = Math.min(windowWidth, windowHeight) * 0.85;
+    // 优化：棋盘占满宽度，只留10px安全边距
+    const horizontalPadding = 10;
+    const statusBarHeight = 180; // 顶部状态栏高度
+    const availableHeight = windowHeight - this.safeTop - statusBarHeight - 60;
+    const availableWidth = windowWidth - horizontalPadding * 2;
+    
+    const boardSize = Math.min(availableWidth, availableHeight);
     const cellSize = boardSize / (Config.BOARD_SIZE - 1);
     
     this.cellSize = cellSize;
     this.offsetX = (windowWidth - boardSize) / 2;
-    this.offsetY = this.safeTop + 180 + (windowHeight - this.safeTop - 240 - boardSize) / 2;
+    this.offsetY = this.safeTop + statusBarHeight + (availableHeight - boardSize) / 2;
+    
+    console.log(`📐 多人对战棋盘: 格子=${cellSize.toFixed(1)}px, 棋盘=${boardSize.toFixed(1)}px, 屏幕=${windowWidth}px`);
 
     // 棋盘背景
     ctx.save();
@@ -604,6 +641,61 @@ class MultiplayerGameScene {
         }
       }
     }
+    
+    // 绘制预览棋子（半透明）
+    if (this.previewPosition) {
+      this.drawPreviewPiece(this.previewPosition.x, this.previewPosition.y, this.currentPlayer);
+    }
+  }
+  
+  /**
+   * 绘制预览棋子（半透明，带提示）
+   */
+  drawPreviewPiece(row, col, color) {
+    const ctx = this.ctx;
+    const x = this.offsetX + col * this.cellSize;
+    const y = this.offsetY + row * this.cellSize;
+    const radius = Config.PIECE_RADIUS;
+    
+    ctx.save();
+    
+    // 设置半透明
+    ctx.globalAlpha = 0.6;
+    
+    // 绘制提示圈（虚线）
+    const pulseRadius = radius * 1.5;
+    ctx.strokeStyle = color === Config.PIECE.BLACK ? '#000000' : '#666666';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    ctx.arc(x, y, pulseRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // 绘制半透明棋子
+    if (color === Config.PIECE.BLACK) {
+      ctx.fillStyle = '#333333';
+    } else {
+      ctx.fillStyle = '#DDDDDD';
+    }
+    
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 绘制边框
+    ctx.strokeStyle = color === Config.PIECE.BLACK ? '#000000' : '#999999';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]);
+    ctx.stroke();
+    
+    // 绘制"点击确认"文字
+    ctx.globalAlpha = 0.9;
+    ctx.fillStyle = '#FF6B6B';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('再点一次', x, y + radius + 18);
+    
+    ctx.restore();
   }
 
   /**

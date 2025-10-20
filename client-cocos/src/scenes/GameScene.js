@@ -46,13 +46,14 @@ class GameScene {
     // 布局参数
     const titleHeight = 80;      // 标题区域高度
     const statusBarHeight = 80;  // 底部状态栏高度
-    const padding = 20;          // 边距
+    const horizontalPadding = 10; // 左右最小边距（防止贴边）
+    const verticalPadding = 10;   // 上下最小边距
     
-    // 计算可用空间
-    const availableHeight = windowHeight - titleHeight - statusBarHeight;
-    const availableWidth = windowWidth - padding * 2;
+    // 计算可用空间（横向占满屏幕，只留10px安全边距）
+    const availableHeight = windowHeight - titleHeight - statusBarHeight - verticalPadding * 2;
+    const availableWidth = windowWidth - horizontalPadding * 2;
     
-    // 计算合适的格子大小
+    // 计算合适的格子大小（优先占满宽度）
     this.cellSize = Math.min(
       availableWidth / (Config.BOARD_SIZE - 1),
       availableHeight / (Config.BOARD_SIZE - 1)
@@ -62,11 +63,16 @@ class GameScene {
     const boardWidth = this.cellSize * (Config.BOARD_SIZE - 1);
     const boardHeight = this.cellSize * (Config.BOARD_SIZE - 1);
     
-    // 水平居中
+    // 水平居中（几乎占满宽度）
     this.offsetX = (windowWidth - boardWidth) / 2;
     
     // 垂直居中（在标题和状态栏之间）
-    this.offsetY = titleHeight + (availableHeight - boardHeight) / 2;
+    this.offsetY = titleHeight + verticalPadding + (availableHeight - boardHeight) / 2;
+    
+    console.log(`📐 棋盘布局: 格子大小=${this.cellSize.toFixed(1)}px, 棋盘宽度=${boardWidth.toFixed(1)}px, 屏幕宽度=${windowWidth}px`);
+    
+    // 点击预览状态
+    this.previewPosition = null; // 预览位置 {x, y}
     
     this.bindEvents();
   }
@@ -122,7 +128,24 @@ class GameScene {
     
     const pos = this.getTouchPosition(x, y);
     if (pos && this.board[pos.x][pos.y] === Config.PIECE.EMPTY) {
-      this.placePiece(pos.x, pos.y);
+      // 双击确认逻辑
+      if (this.previewPosition && 
+          this.previewPosition.x === pos.x && 
+          this.previewPosition.y === pos.y) {
+        // 第二次点击同一位置，确认下棋
+        console.log(`✅ 确认下棋: (${pos.x}, ${pos.y})`);
+        this.previewPosition = null; // 清除预览
+        this.placePiece(pos.x, pos.y);
+      } else {
+        // 第一次点击或点击不同位置，显示预览
+        console.log(`👆 预览位置: (${pos.x}, ${pos.y})`);
+        this.previewPosition = pos;
+        
+        // 震动反馈
+        wx.vibrateShort({
+          type: 'light'
+        });
+      }
     }
   }
 
@@ -623,6 +646,61 @@ class GameScene {
         }
       }
     }
+    
+    // 绘制预览棋子（半透明）
+    if (this.previewPosition) {
+      this.drawPreviewPiece(this.previewPosition.x, this.previewPosition.y, this.currentPlayer);
+    }
+  }
+  
+  /**
+   * 绘制预览棋子（半透明，带闪烁动画）
+   */
+  drawPreviewPiece(x, y, color) {
+    const ctx = this.ctx;
+    const centerX = this.offsetX + x * this.cellSize;
+    const centerY = this.offsetY + y * this.cellSize;
+    const radius = this.cellSize * 0.4;
+    
+    ctx.save();
+    
+    // 设置半透明
+    ctx.globalAlpha = 0.6;
+    
+    // 绘制提示圈（脉动效果）
+    const pulseRadius = radius * 1.3;
+    ctx.strokeStyle = color === Config.PIECE.BLACK ? '#000000' : '#666666';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]); // 虚线
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, pulseRadius, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // 绘制半透明棋子
+    if (color === Config.PIECE.BLACK) {
+      ctx.fillStyle = '#333333';
+    } else {
+      ctx.fillStyle = '#DDDDDD';
+    }
+    
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // 绘制边框
+    ctx.strokeStyle = color === Config.PIECE.BLACK ? '#000000' : '#999999';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([]); // 恢复实线
+    ctx.stroke();
+    
+    // 绘制"点击确认"文字
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = '#FF6B6B';
+    ctx.font = 'bold 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('再点一次', centerX, centerY + radius + 20);
+    
+    ctx.restore();
   }
 
   drawPiece(x, y, color) {
@@ -696,6 +774,7 @@ class GameScene {
     this.currentPlayer = Config.PIECE.BLACK;
     this.lastMove = null;
     this.isAIThinking = false;
+    this.previewPosition = null; // 清除预览
     
     // 如果是AI对战且AI执黑（玩家执白后手），让AI先下一子
     if (this.config.mode === 'ai' && this.aiColor === Config.PIECE.BLACK) {
