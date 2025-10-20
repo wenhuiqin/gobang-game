@@ -71,7 +71,7 @@ class LoginScene {
         console.log('📝 弹出授权窗口，请求获取昵称和头像...');
         const profileRes = await new Promise((resolve, reject) => {
           wx.getUserProfile({
-            desc: '用于完善游戏内的个人信息展示，包括昵称和头像，以便在排行榜和对战中识别玩家身份', // 必填，需要详细说明用途
+            desc: '展示您的昵称和头像', // 必填，最多30字符（15个汉字）
             success: resolve,
             fail: reject,
           });
