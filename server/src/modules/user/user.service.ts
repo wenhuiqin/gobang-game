@@ -176,7 +176,7 @@ export class UserService {
         return {
           id: user.user_id,
           nickname: user.user_nickname,
-          avatarUrl: user.user_avatarUrl,
+          avatarUrl: user.user_avatar_url, // 修复：getRawMany() 返回的是下划线字段名
           totalGames,
           winGames,
           loseGames,

@@ -49,15 +49,18 @@ class RankScene {
   loadAvatar(url) {
     if (!url || this.avatarImages[url]) return;
     
+    if (this.loadingAvatars[url]) return; // 正在加载中，避免重复加载
+    
+    this.loadingAvatars[url] = true;
     const img = wx.createImage();
     img.onload = () => {
       this.avatarImages[url] = img;
       delete this.loadingAvatars[url];
-      // 头像加载完成后重新渲染
-      this.render();
+      console.log('✅ 头像加载成功:', url);
+      // 头像加载完成后会在gameLoop中自动渲染
     };
     img.onerror = () => {
-      console.error('头像加载失败:', url);
+      console.error('❌ 头像加载失败:', url);
       delete this.loadingAvatars[url];
     };
     img.src = url;
@@ -360,9 +363,8 @@ class RankScene {
       const firstChar = (item.nickname || '?')[0].toUpperCase();
       ctx.fillText(firstChar, avatarX, avatarY);
       
-      // 触发头像加载（如果还未加载）
-      if (avatarUrl && !this.loadingAvatars[avatarUrl]) {
-        this.loadingAvatars[avatarUrl] = true;
+      // 触发头像加载（loadAvatar 内部会管理 loadingAvatars 状态）
+      if (avatarUrl) {
         this.loadAvatar(avatarUrl);
       }
     }
