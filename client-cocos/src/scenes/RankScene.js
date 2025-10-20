@@ -360,10 +360,7 @@ class RankScene {
       const firstChar = (item.nickname || '?')[0].toUpperCase();
       ctx.fillText(firstChar, avatarX, avatarY);
       
-      // 预加载头像图片
-      if (avatarUrl && !this.loadingAvatars) {
-        this.loadingAvatars = {};
-      }
+      // 触发头像加载（如果还未加载）
       if (avatarUrl && !this.loadingAvatars[avatarUrl]) {
         this.loadingAvatars[avatarUrl] = true;
         this.loadAvatar(avatarUrl);
