@@ -219,41 +219,67 @@ export class WebSocketService implements OnModuleInit {
       7200
     );
 
-    // 通知两个玩家（包含完整对手信息）
+    // 检查两个玩家的WebSocket连接
     const client1 = this.clients.get(player1.userId);
     const client2 = this.clients.get(player2.userId);
 
     this.logger.log(`🔍 查找WebSocket连接: player1=${player1.userId}, client1=${!!client1}, player2=${player2.userId}, client2=${!!client2}`);
 
-    if (client1) {
-      this.logger.log(`📤 通知玩家1 (${player1.userId}): 匹配成功，yourColor=1`);
-      this.send(client1, 'matchFound', {
-        roomId,
-        opponent: user2Info ? {
-          id: user2Info.id,
-          nickname: user2Info.nickname,
-          avatarUrl: user2Info.avatarUrl,
-        } : { id: player2.userId, nickname: '对手' },
-        yourColor: 1,
-      });
-    } else {
-      this.logger.error(`❌ 玩家1 (${player1.userId}) WebSocket未连接`);
+    // 如果有任何一个玩家断线，取消匹配并重新加入队列
+    if (!client1 || !client2) {
+      this.logger.error(`❌ 匹配失败：玩家断线 (player1=${!!client1}, player2=${!!client2})`);
+      
+      // 删除刚创建的房间
+      await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
+      
+      // 将在线的玩家重新加入队列
+      if (client1) {
+        this.logger.log(`♻️ 玩家1 (${player1.userId}) 重新加入队列`);
+        await this.redisService.rpush(
+          REDIS_KEYS.MATCH_QUEUE,
+          JSON.stringify({ userId: player1.userId, rating: player1.rating, timestamp: Date.now() })
+        );
+        this.send(client1, 'matchError', { message: '对手连接异常，正在重新匹配...' });
+      }
+      
+      if (client2) {
+        this.logger.log(`♻️ 玩家2 (${player2.userId}) 重新加入队列`);
+        await this.redisService.rpush(
+          REDIS_KEYS.MATCH_QUEUE,
+          JSON.stringify({ userId: player2.userId, rating: player2.rating, timestamp: Date.now() })
+        );
+        this.send(client2, 'matchError', { message: '对手连接异常，正在重新匹配...' });
+      }
+      
+      // 尝试继续匹配
+      setTimeout(() => this.tryMatch(), 1000);
+      return;
     }
 
-    if (client2) {
-      this.logger.log(`📤 通知玩家2 (${player2.userId}): 匹配成功，yourColor=2`);
-      this.send(client2, 'matchFound', {
-        roomId,
-        opponent: user1Info ? {
-          id: user1Info.id,
-          nickname: user1Info.nickname,
-          avatarUrl: user1Info.avatarUrl,
-        } : { id: player1.userId, nickname: '对手' },
-        yourColor: 2,
-      });
-    } else {
-      this.logger.error(`❌ 玩家2 (${player2.userId}) WebSocket未连接`);
-    }
+    // 两个玩家都在线，通知匹配成功
+    this.logger.log(`✅ 两个玩家都在线，通知匹配成功`);
+    
+    this.logger.log(`📤 通知玩家1 (${player1.userId}): 匹配成功，yourColor=1`);
+    this.send(client1, 'matchFound', {
+      roomId,
+      opponent: user2Info ? {
+        id: user2Info.id,
+        nickname: user2Info.nickname,
+        avatarUrl: user2Info.avatarUrl,
+      } : { id: player2.userId, nickname: '对手' },
+      yourColor: 1,
+    });
+
+    this.logger.log(`📤 通知玩家2 (${player2.userId}): 匹配成功，yourColor=2`);
+    this.send(client2, 'matchFound', {
+      roomId,
+      opponent: user1Info ? {
+        id: user1Info.id,
+        nickname: user1Info.nickname,
+        avatarUrl: user1Info.avatarUrl,
+      } : { id: player1.userId, nickname: '对手' },
+      yourColor: 2,
+    });
   }
 
   /**

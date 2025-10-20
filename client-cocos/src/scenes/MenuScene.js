@@ -232,25 +232,35 @@ class MenuScene {
       SocketClient.off('matchError', onMatchError);
       SocketClient.off('matchCancelled', onMatchCancelled);
       
-      // 立即关闭所有弹窗（包括modal）
-      console.log('🚫 关闭所有弹窗');
-      try {
-        wx.hideLoading();
-        wx.hideToast();
-      } catch (e) {
-        console.log('关闭loading/toast失败:', e);
+      // 移除取消匹配的触摸事件监听
+      if (matchState.cancelHandler) {
+        wx.offTouchStart(matchState.cancelHandler);
+        matchState.cancelHandler = null;
       }
       
-      // 显示匹配成功信息（包含对手信息）
+      // 立即关闭所有弹窗
+      console.log('🚫 关闭所有弹窗');
+      wx.hideLoading();
+      wx.hideToast();
+      
+      // 显示匹配成功信息
       const opponentName = opponent && opponent.nickname ? opponent.nickname : '未知玩家';
       const colorText = yourColor === 1 ? '⚫ 黑方（先手）' : '⚪ 白方（后手）';
       
       console.log(`🎮 准备进入对战房间 ${roomId}，你是${colorText}，对手：${opponentName}`);
       
-      // 不再显示Toast，直接进入游戏（避免延迟）
-      console.log(`🎮 立即进入游戏`);
-      const SceneManager = require('../utils/SceneManager.js');
-      SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
+      // 显示匹配成功Toast，然后进入游戏（添加短暂延迟确保状态同步）
+      wx.showToast({
+        title: `匹配成功！`,
+        icon: 'success',
+        duration: 1000
+      });
+      
+      setTimeout(() => {
+        console.log(`🎮 进入游戏`);
+        const SceneManager = require('../utils/SceneManager.js');
+        SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
+      }, 1000);
     };
     
     // 监听加入队列成功
@@ -273,12 +283,27 @@ class MenuScene {
       if (matchState.cancelled) return;
       
       console.error('❌ 匹配错误:', data);
+      
+      // 关闭Loading并移除取消事件监听
+      wx.hideLoading();
+      if (matchState.cancelHandler) {
+        wx.offTouchStart(matchState.cancelHandler);
+        matchState.cancelHandler = null;
+      }
+      
       wx.showToast({ title: data.message, icon: 'none' });
     };
     
     // 监听取消成功
     const onMatchCancelled = (data) => {
       console.log('✅ 取消匹配成功:', data);
+      
+      // 关闭Loading并移除取消事件监听
+      wx.hideLoading();
+      if (matchState.cancelHandler) {
+        wx.offTouchStart(matchState.cancelHandler);
+        matchState.cancelHandler = null;
+      }
     };
     
     console.log('📝 注册事件监听器: matchFound, matchJoined, matchError, matchCancelled');
@@ -293,55 +318,59 @@ class MenuScene {
     SocketClient.joinMatch(rating);
   }
   
-  // 显示匹配对话框（递归调用，直到匹配成功或取消）
+  // 显示匹配对话框（使用Loading，避免阻塞）
   showMatchModal(SocketClient, matchState) {
-    console.log('💬 准备显示匹配对话框');
+    console.log('💬 显示匹配Loading');
     console.log('📊 matchState:', matchState);
     
     // 检查是否已经匹配成功或取消
     if (matchState.cancelled || matchState.found) {
-      console.log('⚠️ 匹配状态已变更，不再显示对话框');
+      console.log('⚠️ 匹配状态已变更，不再显示Loading');
       return;
     }
     
-    // 设置一个标志位，防止在对话框显示后立即匹配成功时产生竞态条件
-    const modalDisplayTime = Date.now();
-    console.log(`💬 显示对话框: time=${modalDisplayTime}`);
-    
-    wx.showModal({
-      title: '正在匹配',
-      content: '正在为你寻找对手...\n请稍候',
-      showCancel: true,
-      cancelText: '取消匹配',
-      confirmText: '继续等待',
-      success: (res) => {
-        console.log(`💬 对话框回调触发: confirm=${res.confirm}, time=${Date.now() - modalDisplayTime}ms后`);
-        console.log('📊 回调时matchState:', matchState);
-        
-        // 检查匹配状态（可能在对话框显示期间匹配成功了）
-        if (matchState.found) {
-          console.log('✅ 匹配已成功，对话框自动关闭');
-          return;
-        }
-        
-        if (!res.confirm) {
-          // 用户点击取消匹配
-          console.log('❌ 用户取消匹配');
-          matchState.cancelled = true;
-          SocketClient.cancelMatch();
-          wx.showToast({ title: '已取消匹配', icon: 'none' });
-        } else if (!matchState.cancelled && !matchState.found) {
-          // 用户点击继续等待，递归显示对话框
-          console.log('♻️ 用户选择继续等待，递归显示对话框');
-          this.showMatchModal(SocketClient, matchState);
-        }
-      },
-      fail: (err) => {
-        // 对话框显示失败，可能是匹配成功导致场景切换
-        console.log('⚠️ 对话框显示失败:', err);
-        console.log('📊 失败时matchState:', matchState);
-      }
+    // 使用Loading代替Modal，非阻塞
+    wx.showLoading({
+      title: '正在匹配...',
+      mask: true
     });
+    
+    // 添加一个取消匹配的提示Toast
+    setTimeout(() => {
+      if (!matchState.found && !matchState.cancelled) {
+        wx.showToast({
+          title: '点击屏幕任意处取消匹配',
+          icon: 'none',
+          duration: 2000
+        });
+      }
+    }, 1000);
+    
+    // 监听用户点击屏幕取消匹配
+    const cancelHandler = () => {
+      if (!matchState.found && !matchState.cancelled) {
+        wx.showModal({
+          title: '取消匹配',
+          content: '确定要取消匹配吗？',
+          success: (res) => {
+            if (res.confirm) {
+              console.log('❌ 用户取消匹配');
+              matchState.cancelled = true;
+              SocketClient.cancelMatch();
+              wx.hideLoading();
+              wx.showToast({ title: '已取消匹配', icon: 'none' });
+              wx.offTouchStart(cancelHandler);
+            }
+          }
+        });
+      }
+    };
+    
+    // 临时绑定取消事件
+    wx.onTouchStart(cancelHandler);
+    
+    // 保存handler以便清理
+    matchState.cancelHandler = cancelHandler;
   }
   
   showFriendOptions() {
