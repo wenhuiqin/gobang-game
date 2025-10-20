@@ -71,7 +71,7 @@ class LoginScene {
         console.log('📝 弹出授权窗口，请求获取昵称和头像...');
         const profileRes = await new Promise((resolve, reject) => {
           wx.getUserProfile({
-            desc: '获取你的昵称和头像，用于显示个人信息', // 必填，显示在授权弹窗中
+            desc: '用于完善游戏内的个人信息展示，包括昵称和头像，以便在排行榜和对战中识别玩家身份', // 必填，需要详细说明用途
             success: resolve,
             fail: reject,
           });
@@ -84,12 +84,12 @@ class LoginScene {
         console.error('❌ 用户拒绝授权或获取信息失败:', profileError);
         wx.hideLoading();
         
-        // 🔧 明确提示用户授权失败
+        // 🔧 明确提示用户授权失败，直接使用游客登录
         const result = await new Promise((resolve) => {
           wx.showModal({
-            title: '需要授权',
-            content: '需要获取你的微信昵称和头像才能显示个人信息哦~\n\n点击"重新授权"可获取真实昵称，\n或选择"游客登录"继续游戏。',
-            confirmText: '重新授权',
+            title: '授权提示',
+            content: '您可以选择"微信登录"获取真实昵称头像，或直接"游客登录"开始游戏。\n\n游客模式也可以正常游玩，排行榜会显示为"游客"。',
+            confirmText: '微信登录',
             cancelText: '游客登录',
             success: resolve
           });

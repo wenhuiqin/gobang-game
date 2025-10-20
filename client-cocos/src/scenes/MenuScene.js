@@ -811,7 +811,7 @@ class MenuScene {
       // 调用微信授权获取用户信息
       const profileRes = await new Promise((resolve, reject) => {
         wx.getUserProfile({
-          desc: '更新你的昵称和头像',
+          desc: '用于更新您在游戏中的昵称和头像信息，以便在排行榜和对战中显示您的最新个人资料',
           success: resolve,
           fail: reject,
         });
