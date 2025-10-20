@@ -18,9 +18,10 @@ export const GAME_CONFIG = {
   MATCH_RATING_DIFF_INCREMENT: 10,   // 每秒增加的评分差
   
   // AI配置
-  AI_DEPTH_EASY: 2,                  // 简单AI深度
-  AI_DEPTH_MEDIUM: 3,                // 中等AI深度（优化：4->3）
-  AI_DEPTH_HARD: 4,                  // 困难AI深度（优化：6->4，平衡性能和智能）
+  AI_DEPTH_EASY: 2,                  // 简单AI深度（快速响应，新手友好）
+  AI_DEPTH_MEDIUM: 4,                // 中等AI深度（平衡性能，适合大多数玩家）
+  AI_DEPTH_HARD: 6,                  // 困难AI深度（有挑战性，高手对决）
+  AI_MAX_CANDIDATES: 12,             // 候选位置最大数量（优化搜索速度）
   
   // 评分配置
   RATING_DEFAULT: 1000,              // 默认评分

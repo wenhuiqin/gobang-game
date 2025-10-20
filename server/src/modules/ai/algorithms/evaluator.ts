@@ -1,17 +1,42 @@
 import { PieceColor, GAME_CONFIG } from '@/common/constants/game.constants';
 
 /**
- * 棋型评分
+ * 棋型评分（优化权重）
  */
 const PATTERN_SCORES = {
   FIVE: 100000,       // 五连 - 必胜
   LIVE_FOUR: 50000,   // 活四 - 下一步必胜
-  RUSH_FOUR: 10000,   // 冲四 - 连4待补，提高权重！
-  LIVE_THREE: 5000,   // 活三 - 两步成五
-  SLEEP_THREE: 1000,  // 眠三
-  LIVE_TWO: 500,      // 活二
-  SLEEP_TWO: 100,     // 眠二
+  RUSH_FOUR: 8000,    // 冲四 - 必须防守
+  LIVE_THREE: 3000,   // 活三 - 两步成五
+  SLEEP_THREE: 800,   // 眠三
+  LIVE_TWO: 300,      // 活二
+  SLEEP_TWO: 50,      // 眠二
+  
+  // 组合棋型加分
+  DOUBLE_LIVE_THREE: 20000,  // 双活三 - 必胜
+  LIVE_THREE_RUSH_FOUR: 15000, // 活三+冲四 - 必胜
 };
+
+/**
+ * 位置价值矩阵（中心位置更有价值）
+ */
+const POSITION_VALUE: number[][] = (() => {
+  const size = 15;
+  const board: number[][] = Array(size).fill(0).map(() => Array(size).fill(0));
+  const center = Math.floor(size / 2);
+  
+  for (let i = 0; i < size; i++) {
+    for (let j = 0; j < size; j++) {
+      // 距离中心越近，价值越高
+      const distX = Math.abs(i - center);
+      const distY = Math.abs(j - center);
+      const dist = Math.max(distX, distY);
+      board[i][j] = (center - dist) * 10;
+    }
+  }
+  
+  return board;
+})();
 
 /**
  * 评估函数
@@ -29,13 +54,84 @@ export class Evaluator {
       for (let j = 0; j < GAME_CONFIG.BOARD_SIZE; j++) {
         if (board[i][j] === color) {
           score += this.evaluatePosition(board, i, j, color);
+          score += POSITION_VALUE[i][j]; // 位置价值
         } else if (board[i][j] === opponent) {
           score -= this.evaluatePosition(board, i, j, opponent);
+          score -= POSITION_VALUE[i][j] * 0.8; // 对手位置价值稍微降低权重
         }
       }
     }
 
+    // 检测组合棋型（双活三、活三冲四等必胜组合）
+    score += this.evaluateComboPatterns(board, color);
+    score -= this.evaluateComboPatterns(board, opponent) * 1.2; // 对手的威胁更危险
+
     return score;
+  }
+  
+  /**
+   * 评估组合棋型（双活三、活三+冲四等）
+   */
+  static evaluateComboPatterns(board: number[][], color: PieceColor): number {
+    let score = 0;
+    
+    for (let i = 0; i < GAME_CONFIG.BOARD_SIZE; i++) {
+      for (let j = 0; j < GAME_CONFIG.BOARD_SIZE; j++) {
+        if (board[i][j] === PieceColor.EMPTY) {
+          // 尝试在这个位置放棋子
+          board[i][j] = color;
+          
+          const liveThrees = this.countPattern(board, i, j, color, 'LIVE_THREE');
+          const rushFours = this.countPattern(board, i, j, color, 'RUSH_FOUR');
+          
+          // 双活三或更多 = 必胜
+          if (liveThrees >= 2) {
+            score += PATTERN_SCORES.DOUBLE_LIVE_THREE;
+          }
+          // 活三 + 冲四 = 必胜
+          else if (liveThrees >= 1 && rushFours >= 1) {
+            score += PATTERN_SCORES.LIVE_THREE_RUSH_FOUR;
+          }
+          
+          // 恢复
+          board[i][j] = PieceColor.EMPTY;
+        }
+      }
+    }
+    
+    return score;
+  }
+  
+  /**
+   * 统计某个位置形成特定棋型的数量
+   */
+  static countPattern(board: number[][], x: number, y: number, color: PieceColor, patternType: string): number {
+    let count = 0;
+    const directions = [
+      [0, 1],   // 横
+      [1, 0],   // 竖
+      [1, 1],   // 主对角
+      [1, -1],  // 副对角
+    ];
+
+    for (const [dx, dy] of directions) {
+      const pattern = this.getPattern(board, x, y, dx, dy, color);
+      
+      if (patternType === 'LIVE_THREE') {
+        if (pattern.includes('01110') || pattern.includes('011010') || pattern.includes('010110')) {
+          count++;
+        }
+      } else if (patternType === 'RUSH_FOUR') {
+        if (
+          pattern.includes('11110') || pattern.includes('01111') ||
+          pattern.includes('11011') || pattern.includes('10111') || pattern.includes('11101')
+        ) {
+          count++;
+        }
+      }
+    }
+    
+    return count;
   }
 
   /**

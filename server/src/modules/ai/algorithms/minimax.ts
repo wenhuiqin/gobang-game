@@ -138,7 +138,7 @@ export class MinimaxAI {
       board[b.x][b.y] = PieceColor.EMPTY;
 
       return scoreB - scoreA;
-    }).slice(0, 15); // 优化：20->15，减少候选位置数量，提升速度
+    }).slice(0, GAME_CONFIG.AI_MAX_CANDIDATES); // 使用配置项控制候选数量
   }
 
   /**
