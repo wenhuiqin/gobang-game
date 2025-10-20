@@ -89,7 +89,7 @@ export class MinimaxAI {
   /**
    * 获取候选落子点（启发式搜索优化）
    */
-  private static getCandidateMoves(board: number[][]): Move[] {
+  private static getCandidateMoves(board: number[][], aiColor: PieceColor): Move[] {
     const moves: Move[] = [];
     const visited = new Set<string>();
 
@@ -127,18 +127,35 @@ export class MinimaxAI {
       return [{ x: center, y: center }];
     }
 
-    // 按评分排序（提高剪枝效率）
+    // 按评分排序（攻守平衡优化）
     return moves.sort((a, b) => {
-      board[a.x][a.y] = PieceColor.BLACK; // 临时放置
-      const scoreA = Evaluator.evaluatePosition(board, a.x, a.y, PieceColor.BLACK);
+      // 评估A位置的进攻价值
+      board[a.x][a.y] = aiColor;
+      const attackScoreA = Evaluator.evaluatePosition(board, a.x, a.y, aiColor);
       board[a.x][a.y] = PieceColor.EMPTY;
+      
+      // 评估A位置的防守价值
+      const opponentColor = aiColor === PieceColor.BLACK ? PieceColor.WHITE : PieceColor.BLACK;
+      board[a.x][a.y] = opponentColor;
+      const defendScoreA = Evaluator.evaluatePosition(board, a.x, a.y, opponentColor);
+      board[a.x][a.y] = PieceColor.EMPTY;
+      
+      // 综合评分：进攻权重1.2，防守权重0.8（鼓励进攻）
+      const totalScoreA = attackScoreA * 1.2 + defendScoreA * 0.8;
 
-      board[b.x][b.y] = PieceColor.BLACK;
-      const scoreB = Evaluator.evaluatePosition(board, b.x, b.y, PieceColor.BLACK);
+      // 评估B位置
+      board[b.x][b.y] = aiColor;
+      const attackScoreB = Evaluator.evaluatePosition(board, b.x, b.y, aiColor);
       board[b.x][b.y] = PieceColor.EMPTY;
+      
+      board[b.x][b.y] = opponentColor;
+      const defendScoreB = Evaluator.evaluatePosition(board, b.x, b.y, opponentColor);
+      board[b.x][b.y] = PieceColor.EMPTY;
+      
+      const totalScoreB = attackScoreB * 1.2 + defendScoreB * 0.8;
 
-      return scoreB - scoreA;
-    }).slice(0, GAME_CONFIG.AI_MAX_CANDIDATES); // 使用配置项控制候选数量
+      return totalScoreB - totalScoreA;
+    }).slice(0, GAME_CONFIG.AI_MAX_CANDIDATES);
   }
 
   /**
@@ -160,7 +177,7 @@ export class MinimaxAI {
       };
     }
 
-    const moves = this.getCandidateMoves(board);
+    const moves = this.getCandidateMoves(board, aiColor);
     let bestMove: Move | null = null;
 
     if (isMaximizing) {
@@ -328,42 +345,77 @@ export class MinimaxAI {
   }
 
   /**
-   * 获取AI落子
+   * 获取AI落子（带迭代加深和时间控制）
    */
   static getBestMove(board: number[][], depth: number, aiColor: PieceColor): Move | null {
     const opponentColor = aiColor === PieceColor.BLACK ? PieceColor.WHITE : PieceColor.BLACK;
     
+    console.log(`🤖 AI开始思考，目标深度: ${depth}`);
+    const startTime = Date.now();
+    
     // 1. 优先检查AI是否有必杀位置（能立即获胜）
     const winningMove = this.findWinningMove(board, aiColor);
     if (winningMove) {
-      console.log('🎯 发现必杀位置！', winningMove);
+      console.log(`🎯 发现必杀位置！用时: ${Date.now() - startTime}ms`, winningMove);
       return winningMove;
     }
     
     // 2. 检查对手是否有必杀位置（必须防守）
     const defendMove = this.findWinningMove(board, opponentColor);
     if (defendMove) {
-      console.log('🛡️ 防守对手必杀位置！', defendMove);
+      console.log(`🛡️ 防守对手必杀位置！用时: ${Date.now() - startTime}ms`, defendMove);
       return defendMove;
     }
     
     // 3. 检查AI是否能形成活四（两步必杀）
     const liveFourMove = this.findLiveFourMove(board, aiColor);
     if (liveFourMove) {
-      console.log('⚡ 发现活四机会！', liveFourMove);
+      console.log(`⚡ 发现活四机会！用时: ${Date.now() - startTime}ms`, liveFourMove);
       return liveFourMove;
     }
     
     // 4. 检查对手是否能形成活四（必须防守）
     const defendLiveFourMove = this.findLiveFourMove(board, opponentColor);
     if (defendLiveFourMove) {
-      console.log('🛡️ 防守对手活四！', defendLiveFourMove);
+      console.log(`🛡️ 防守对手活四！用时: ${Date.now() - startTime}ms`, defendLiveFourMove);
       return defendLiveFourMove;
     }
     
-    // 5. 没有必杀/活四，使用minimax搜索最佳位置
-    const result = this.minimax(board, depth, -Infinity, Infinity, true, aiColor);
-    return result.move;
+    // 5. 使用迭代加深搜索（逐步增加深度，带时间控制）
+    let bestMove: Move | null = null;
+    const timeout = GAME_CONFIG.AI_TIMEOUT;
+    
+    // 从深度1开始逐步加深
+    for (let currentDepth = 1; currentDepth <= depth; currentDepth++) {
+      const elapsed = Date.now() - startTime;
+      
+      // 检查是否超时
+      if (elapsed > timeout * 0.9) {
+        console.log(`⏱️ 接近超时，停止在深度 ${currentDepth - 1}，用时: ${elapsed}ms`);
+        break;
+      }
+      
+      try {
+        const result = this.minimax(board, currentDepth, -Infinity, Infinity, true, aiColor);
+        if (result.move) {
+          bestMove = result.move;
+          console.log(`✅ 深度 ${currentDepth} 完成，当前最佳: (${bestMove.x}, ${bestMove.y}), 用时: ${Date.now() - startTime}ms`);
+        }
+      } catch (error) {
+        console.error(`❌ 深度 ${currentDepth} 搜索出错:`, error);
+        break;
+      }
+      
+      // 如果已经达到目标深度，退出
+      if (currentDepth >= depth) {
+        break;
+      }
+    }
+    
+    const totalTime = Date.now() - startTime;
+    console.log(`🏁 AI思考完成，总用时: ${totalTime}ms，最终选择: (${bestMove?.x}, ${bestMove?.y})`);
+    
+    return bestMove;
   }
 }
 

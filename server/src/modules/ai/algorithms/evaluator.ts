@@ -71,30 +71,51 @@ export class Evaluator {
   
   /**
    * 评估组合棋型（双活三、活三+冲四等）
+   * 优化：只检查已有棋子周围的关键位置
    */
   static evaluateComboPatterns(board: number[][], color: PieceColor): number {
     let score = 0;
+    const checked = new Set<string>();
     
+    // 只检查已有己方棋子周围2格内的空位
     for (let i = 0; i < GAME_CONFIG.BOARD_SIZE; i++) {
       for (let j = 0; j < GAME_CONFIG.BOARD_SIZE; j++) {
-        if (board[i][j] === PieceColor.EMPTY) {
-          // 尝试在这个位置放棋子
-          board[i][j] = color;
-          
-          const liveThrees = this.countPattern(board, i, j, color, 'LIVE_THREE');
-          const rushFours = this.countPattern(board, i, j, color, 'RUSH_FOUR');
-          
-          // 双活三或更多 = 必胜
-          if (liveThrees >= 2) {
-            score += PATTERN_SCORES.DOUBLE_LIVE_THREE;
+        if (board[i][j] === color) {
+          // 检查周围2格
+          for (let dx = -2; dx <= 2; dx++) {
+            for (let dy = -2; dy <= 2; dy++) {
+              const x = i + dx;
+              const y = j + dy;
+              const key = `${x},${y}`;
+              
+              if (
+                x >= 0 && x < GAME_CONFIG.BOARD_SIZE &&
+                y >= 0 && y < GAME_CONFIG.BOARD_SIZE &&
+                board[x][y] === PieceColor.EMPTY &&
+                !checked.has(key)
+              ) {
+                checked.add(key);
+                
+                // 尝试在这个位置放棋子
+                board[x][y] = color;
+                
+                const liveThrees = this.countPattern(board, x, y, color, 'LIVE_THREE');
+                const rushFours = this.countPattern(board, x, y, color, 'RUSH_FOUR');
+                
+                // 双活三或更多 = 必胜
+                if (liveThrees >= 2) {
+                  score += PATTERN_SCORES.DOUBLE_LIVE_THREE;
+                }
+                // 活三 + 冲四 = 必胜
+                else if (liveThrees >= 1 && rushFours >= 1) {
+                  score += PATTERN_SCORES.LIVE_THREE_RUSH_FOUR;
+                }
+                
+                // 恢复
+                board[x][y] = PieceColor.EMPTY;
+              }
+            }
           }
-          // 活三 + 冲四 = 必胜
-          else if (liveThrees >= 1 && rushFours >= 1) {
-            score += PATTERN_SCORES.LIVE_THREE_RUSH_FOUR;
-          }
-          
-          // 恢复
-          board[i][j] = PieceColor.EMPTY;
         }
       }
     }
@@ -154,6 +175,47 @@ export class Evaluator {
     }
 
     return score;
+  }
+  
+  /**
+   * 检查某个位置是否已经被有效防守
+   * （如果对手的威胁已经被堵住一端，就不需要再堵另一端）
+   */
+  static isThreatenedLineBlocked(
+    board: number[][],
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    opponentColor: PieceColor
+  ): boolean {
+    // 检查这个方向是否有对手的连子
+    let opponentCount = 0;
+    let emptyCount = 0;
+    let ourCount = 0;
+    const myColor = opponentColor === PieceColor.BLACK ? PieceColor.WHITE : PieceColor.BLACK;
+    
+    // 检查这个方向的9个位置（-4到+4）
+    for (let i = -4; i <= 4; i++) {
+      if (i === 0) continue;
+      const nx = x + dx * i;
+      const ny = y + dy * i;
+      
+      if (nx < 0 || nx >= GAME_CONFIG.BOARD_SIZE || ny < 0 || ny >= GAME_CONFIG.BOARD_SIZE) {
+        continue;
+      }
+      
+      if (board[nx][ny] === opponentColor) {
+        opponentCount++;
+      } else if (board[nx][ny] === myColor) {
+        ourCount++;
+      } else {
+        emptyCount++;
+      }
+    }
+    
+    // 如果这个方向已经有我方棋子，说明已经有防守
+    return ourCount > 0 && opponentCount >= 2;
   }
 
   /**
