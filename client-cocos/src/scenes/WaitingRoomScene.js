@@ -31,6 +31,10 @@ class WaitingRoomScene {
     this.dots = 0;
     this.dotsTimer = null;
     
+    // 头像缓存
+    this.avatarImages = {};
+    this.loadingAvatars = {};
+    
     console.log('🏠 等候房间场景初始化:', this.roomCode);
     
     this.bindEvents();
@@ -92,6 +96,26 @@ class WaitingRoomScene {
   }
   
   /**
+   * 加载头像图片
+   */
+  loadAvatar(url) {
+    if (!url || this.avatarImages[url]) return;
+    
+    const img = wx.createImage();
+    img.onload = () => {
+      this.avatarImages[url] = img;
+      delete this.loadingAvatars[url];
+      // 头像加载完成后重新渲染
+      // render会在gameLoop中自动调用
+    };
+    img.onerror = () => {
+      console.error('头像加载失败:', url);
+      delete this.loadingAvatars[url];
+    };
+    img.src = url;
+  }
+  
+  /**
    * 好友加入
    */
   onOpponentJoin(opponent) {
@@ -99,6 +123,11 @@ class WaitingRoomScene {
     
     this.opponentJoined = true;
     this.opponent = opponent;
+    
+    // 预加载对手头像
+    if (opponent.avatarUrl) {
+      this.loadAvatar(opponent.avatarUrl);
+    }
     
     // 清除点数动画
     if (this.dotsTimer) {
@@ -265,7 +294,7 @@ class WaitingRoomScene {
     // 等待状态或对手信息
     if (this.opponentJoined && this.opponent) {
       this.drawOpponentInfo(cardY + 220);
-      this.drawCountdown(cardY + 370);
+      this.drawCountdown(cardY + 420);
     } else {
       this.drawWaitingStatus(cardY + 220);
     }
@@ -457,10 +486,60 @@ class WaitingRoomScene {
     ctx.textBaseline = 'top';
     ctx.fillText('✓ 对手已加入', this.width / 2, y);
     
+    // 对手头像（圆形）
+    const avatarSize = 70;
+    const avatarX = this.width / 2;
+    const avatarY = y + 70;
+    
+    ctx.save();
+    // 绘制圆形裁剪区域
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    
+    // 绘制头像
+    const avatarUrl = this.opponent.avatarUrl || this.opponent.avatar_url;
+    if (avatarUrl && this.avatarImages && this.avatarImages[avatarUrl]) {
+      // 绘制已加载的头像图片
+      const img = this.avatarImages[avatarUrl];
+      ctx.drawImage(img, avatarX - avatarSize / 2, avatarY - avatarSize / 2, avatarSize, avatarSize);
+    } else {
+      // 占位符：渐变圆形
+      const gradient = ctx.createRadialGradient(avatarX, avatarY, 0, avatarX, avatarY, avatarSize / 2);
+      gradient.addColorStop(0, '#6C63FF');
+      gradient.addColorStop(1, '#4A47A3');
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // 绘制用户首字母
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 28px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const firstChar = ((this.opponent.nickname || '?')[0]).toUpperCase();
+      ctx.fillText(firstChar, avatarX, avatarY);
+      
+      // 预加载头像图片
+      if (avatarUrl && !this.loadingAvatars[avatarUrl]) {
+        this.loadingAvatars[avatarUrl] = true;
+        this.loadAvatar(avatarUrl);
+      }
+    }
+    ctx.restore();
+    
+    // 头像边框
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.stroke();
+    
     // 对手昵称
     ctx.fillStyle = '#424242';
-    ctx.font = '18px sans-serif';
-    ctx.fillText(this.opponent.nickname || '对手', this.width / 2, y + 40);
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(this.opponent.nickname || '对手', this.width / 2, y + 115);
   }
   
   /**

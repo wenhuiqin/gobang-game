@@ -40,6 +40,14 @@ class MultiplayerGameScene {
 
     // DPR缩放
     this.dpr = wx.getSystemInfoSync().pixelRatio || 2;
+    
+    // 头像缓存
+    this.avatarImages = {};
+    this.loadingAvatars = {};
+    
+    // 获取用户信息
+    const userInfo = wx.getStorageSync('userInfo');
+    this.userInfo = userInfo || {};
 
     console.log('🎮 多人对战初始化:');
     console.log('  房间ID:', this.roomId, `(${typeof this.roomId})`);
@@ -47,9 +55,18 @@ class MultiplayerGameScene {
     console.log('  我的颜色:', this.myColor);
     console.log('  对手ID:', this.opponentId, `(${typeof this.opponentId})`);
     console.log('  对手信息:', this.opponent);
+    console.log('  我的信息:', this.userInfo);
 
     this.bindEvents();
     this.setupWebSocket();
+    
+    // 预加载头像
+    if (this.opponent && this.opponent.avatarUrl) {
+      this.loadAvatar(this.opponent.avatarUrl);
+    }
+    if (this.userInfo && this.userInfo.avatarUrl) {
+      this.loadAvatar(this.userInfo.avatarUrl);
+    }
     
     // 启动游戏循环
     this.running = true;
@@ -64,6 +81,25 @@ class MultiplayerGameScene {
     
     this.render();
     requestAnimationFrame(() => this.gameLoop());
+  }
+
+  /**
+   * 加载头像图片
+   */
+  loadAvatar(url) {
+    if (!url || this.avatarImages[url]) return;
+    
+    const img = wx.createImage();
+    img.onload = () => {
+      this.avatarImages[url] = img;
+      delete this.loadingAvatars[url];
+      // 头像加载完成后会在gameLoop中自动渲染
+    };
+    img.onerror = () => {
+      console.error('头像加载失败:', url);
+      delete this.loadingAvatars[url];
+    };
+    img.src = url;
   }
 
   /**
@@ -459,52 +495,158 @@ class MultiplayerGameScene {
     const ctx = this.ctx;
     const { windowWidth } = wx.getSystemInfoSync();
 
-    const barHeight = 80;
+    const barHeight = 100;
     const barY = this.safeTop + 100;
 
     // 背景
     CanvasHelper.fillRoundRect(ctx, 20, barY, windowWidth - 40, barHeight, 10, 'rgba(255, 255, 255, 0.9)');
 
-    // 对手信息
-    ctx.fillStyle = '#2c3e50';
-    ctx.font = 'bold 18px Arial';
-    ctx.textAlign = 'left';
+    const avatarSize = 50;
+    const leftX = 30;
     
-    const opponentName = this.opponent.nickname || '对手';
-    const opponentColor = this.myColor === Config.PIECE.BLACK ? '执白' : '执黑';
+    // === 对手信息（左侧） ===
+    const opponentAvatarX = leftX + avatarSize / 2;
+    const opponentAvatarY = barY + barHeight / 2;
     
-    ctx.fillText(`对手：${opponentName}（${opponentColor}）`, 40, barY + 25);
-
-    // 回合指示
-    ctx.font = '16px Arial';
-    const isMyTurn = this.currentPlayer === this.myColor;
-    const turnText = isMyTurn ? '✅ 你的回合' : '⏳ 对手回合';
-    const myColorText = this.myColor === Config.PIECE.BLACK ? '执黑' : '执白';
-    
-    ctx.fillStyle = isMyTurn ? '#27ae60' : '#95a5a6';
-    ctx.fillText(`你（${myColorText}）- ${turnText}`, 40, barY + 50);
-
-    // 棋子指示
+    // 对手头像
     ctx.save();
-    const pieceX = windowWidth - 60;
-    const pieceY = barY + barHeight / 2;
-    
     ctx.beginPath();
-    ctx.arc(pieceX, pieceY, 18, 0, Math.PI * 2);
-    ctx.fillStyle = this.currentPlayer === Config.PIECE.BLACK ? '#000000' : '#FFFFFF';
-    ctx.fill();
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.arc(opponentAvatarX, opponentAvatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    
+    const opponentAvatarUrl = this.opponent.avatarUrl || this.opponent.avatar_url;
+    if (opponentAvatarUrl && this.avatarImages && this.avatarImages[opponentAvatarUrl]) {
+      const img = this.avatarImages[opponentAvatarUrl];
+      ctx.drawImage(img, opponentAvatarX - avatarSize / 2, opponentAvatarY - avatarSize / 2, avatarSize, avatarSize);
+    } else {
+      // 占位符
+      const gradient = ctx.createRadialGradient(opponentAvatarX, opponentAvatarY, 0, opponentAvatarX, opponentAvatarY, avatarSize / 2);
+      gradient.addColorStop(0, '#FF6B6B');
+      gradient.addColorStop(1, '#C92A2A');
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const firstChar = ((this.opponent.nickname || '?')[0]).toUpperCase();
+      ctx.fillText(firstChar, opponentAvatarX, opponentAvatarY);
+      
+      // 预加载头像
+      if (opponentAvatarUrl && !this.loadingAvatars[opponentAvatarUrl]) {
+        this.loadingAvatars[opponentAvatarUrl] = true;
+        this.loadAvatar(opponentAvatarUrl);
+      }
+    }
     ctx.restore();
+    
+    // 对手头像边框
+    ctx.strokeStyle = '#E74C3C';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(opponentAvatarX, opponentAvatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // 对手信息文字
+    const opponentTextX = leftX + avatarSize + 15;
+    const opponentName = this.opponent.nickname || '对手';
+    const opponentColor = this.myColor === Config.PIECE.BLACK ? '白方' : '黑方';
+    
+    ctx.fillStyle = '#2c3e50';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(opponentName, opponentTextX, barY + 20);
+    
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#7f8c8d';
+    ctx.fillText(`${opponentColor}`, opponentTextX, barY + 42);
+    
+    // 对手回合指示
+    const isOpponentTurn = this.currentPlayer !== this.myColor;
+    if (isOpponentTurn) {
+      ctx.fillStyle = '#27ae60';
+      ctx.font = 'bold 12px Arial';
+      ctx.fillText('● 对方回合', opponentTextX, barY + 62);
+    }
+    
+    // === 我的信息（右侧） ===
+    const myAvatarX = windowWidth - leftX - avatarSize / 2;
+    const myAvatarY = barY + barHeight / 2;
+    
+    // 我的头像
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(myAvatarX, myAvatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    
+    const myAvatarUrl = this.userInfo.avatarUrl || this.userInfo.avatar_url;
+    if (myAvatarUrl && this.avatarImages && this.avatarImages[myAvatarUrl]) {
+      const img = this.avatarImages[myAvatarUrl];
+      ctx.drawImage(img, myAvatarX - avatarSize / 2, myAvatarY - avatarSize / 2, avatarSize, avatarSize);
+    } else {
+      // 占位符
+      const gradient = ctx.createRadialGradient(myAvatarX, myAvatarY, 0, myAvatarX, myAvatarY, avatarSize / 2);
+      gradient.addColorStop(0, '#4ECDC4');
+      gradient.addColorStop(1, '#44A6B0');
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 20px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const firstChar = ((this.userInfo.nickname || '我')[0]).toUpperCase();
+      ctx.fillText(firstChar, myAvatarX, myAvatarY);
+      
+      // 预加载头像
+      if (myAvatarUrl && !this.loadingAvatars[myAvatarUrl]) {
+        this.loadingAvatars[myAvatarUrl] = true;
+        this.loadAvatar(myAvatarUrl);
+      }
+    }
+    ctx.restore();
+    
+    // 我的头像边框
+    ctx.strokeStyle = '#3498DB';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(myAvatarX, myAvatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.stroke();
+    
+    // 我的信息文字
+    const myTextX = myAvatarX - avatarSize / 2 - 15;
+    const myName = this.userInfo.nickname || '我';
+    const myColorText = this.myColor === Config.PIECE.BLACK ? '黑方' : '白方';
+    
+    ctx.fillStyle = '#2c3e50';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(myName, myTextX, barY + 20);
+    
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#7f8c8d';
+    ctx.fillText(`${myColorText}`, myTextX, barY + 42);
+    
+    // 我的回合指示
+    const isMyTurn = this.currentPlayer === this.myColor;
+    if (isMyTurn) {
+      ctx.fillStyle = '#27ae60';
+      ctx.font = 'bold 12px Arial';
+      ctx.fillText('我的回合 ●', myTextX, barY + 62);
+    }
 
-    // 连接状态指示
+    // 连接状态指示（底部居中）
     if (!SocketClient.connected) {
       ctx.save();
       ctx.fillStyle = '#e74c3c';
       ctx.font = '12px Arial';
-      ctx.textAlign = 'right';
-      ctx.fillText('● 连接断开', windowWidth - 40, barY + 70);
+      ctx.textAlign = 'center';
+      ctx.fillText('● 连接断开', windowWidth / 2, barY + barHeight - 10);
       ctx.restore();
     }
   }
@@ -518,7 +660,7 @@ class MultiplayerGameScene {
 
     // 优化：棋盘占满宽度，只留10px安全边距
     const horizontalPadding = 10;
-    const statusBarHeight = 180; // 顶部状态栏高度
+    const statusBarHeight = 200; // 顶部状态栏高度（增加以适应头像）
     const availableHeight = windowHeight - this.safeTop - statusBarHeight - 60;
     const availableWidth = windowWidth - horizontalPadding * 2;
     

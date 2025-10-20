@@ -20,6 +20,10 @@ class RankScene {
     this.rankList = [];
     this.loading = true;
     
+    // 头像缓存
+    this.avatarImages = {}; // 已加载的头像图片
+    this.loadingAvatars = {}; // 正在加载的头像URL
+    
     // Tab选项: online, ai-easy, ai-medium, ai-hard
     this.tabs = [
       { type: 'online', name: '在线对战' },
@@ -37,6 +41,26 @@ class RankScene {
     
     this.bindEvents();
     this.loadRankData();
+  }
+  
+  /**
+   * 加载头像图片
+   */
+  loadAvatar(url) {
+    if (!url || this.avatarImages[url]) return;
+    
+    const img = wx.createImage();
+    img.onload = () => {
+      this.avatarImages[url] = img;
+      delete this.loadingAvatars[url];
+      // 头像加载完成后重新渲染
+      this.render();
+    };
+    img.onerror = () => {
+      console.error('头像加载失败:', url);
+      delete this.loadingAvatars[url];
+    };
+    img.src = url;
   }
 
   bindEvents() {
@@ -277,9 +301,9 @@ class RankScene {
     ctx.restore();
     
     // 排名徽章
-    const medalX = x + 35;
+    const medalX = x + 30;
     const medalY = y + height / 2;
-    const medalSize = 35;
+    const medalSize = 28;
     
     ctx.save();
     if (rank === 1) {
@@ -296,11 +320,63 @@ class RankScene {
     ctx.fill();
     
     ctx.fillStyle = '#FFFFFF';
-    ctx.font = 'bold 20px Arial';
+    ctx.font = 'bold 16px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(rank.toString(), medalX, medalY);
     ctx.restore();
+    
+    // 头像（圆形）
+    const avatarX = x + 75;
+    const avatarY = y + height / 2;
+    const avatarSize = 40;
+    
+    ctx.save();
+    // 绘制圆形裁剪区域
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    
+    // 绘制头像（如果有图片的话，这里先用占位符）
+    const avatarUrl = item.avatarUrl || item.avatar_url;
+    if (avatarUrl && this.avatarImages && this.avatarImages[avatarUrl]) {
+      // 绘制已加载的头像图片
+      const img = this.avatarImages[avatarUrl];
+      ctx.drawImage(img, avatarX - avatarSize / 2, avatarY - avatarSize / 2, avatarSize, avatarSize);
+    } else {
+      // 占位符：渐变圆形
+      const gradient = ctx.createRadialGradient(avatarX, avatarY, 0, avatarX, avatarY, avatarSize / 2);
+      gradient.addColorStop(0, '#6C63FF');
+      gradient.addColorStop(1, '#4A47A3');
+      ctx.fillStyle = gradient;
+      ctx.fill();
+      
+      // 绘制用户首字母
+      ctx.fillStyle = '#FFFFFF';
+      ctx.font = 'bold 18px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const firstChar = (item.nickname || '?')[0].toUpperCase();
+      ctx.fillText(firstChar, avatarX, avatarY);
+      
+      // 预加载头像图片
+      if (avatarUrl && !this.loadingAvatars) {
+        this.loadingAvatars = {};
+      }
+      if (avatarUrl && !this.loadingAvatars[avatarUrl]) {
+        this.loadingAvatars[avatarUrl] = true;
+        this.loadAvatar(avatarUrl);
+      }
+    }
+    ctx.restore();
+    
+    // 头像边框
+    ctx.strokeStyle = rank <= 3 ? '#FFD700' : '#E0E0E0';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(avatarX, avatarY, avatarSize / 2, 0, Math.PI * 2);
+    ctx.stroke();
     
     // 昵称
     ctx.fillStyle = '#2c3e50';
@@ -308,7 +384,7 @@ class RankScene {
     ctx.textAlign = 'left';
     ctx.textBaseline = 'middle';
     const nickname = item.nickname || '匿名';
-    const maxNicknameWidth = width - 180;
+    const maxNicknameWidth = width - 200;
     let displayName = nickname;
     if (ctx.measureText(nickname).width > maxNicknameWidth) {
       while (ctx.measureText(displayName + '...').width > maxNicknameWidth && displayName.length > 0) {
@@ -316,7 +392,7 @@ class RankScene {
       }
       displayName += '...';
     }
-    ctx.fillText(displayName, x + 80, y + height / 2 - 10);
+    ctx.fillText(displayName, x + 105, y + height / 2 - 10);
     
     // 战绩
     ctx.fillStyle = '#757575';
@@ -325,7 +401,7 @@ class RankScene {
       ? ((item.winGames / item.totalGames) * 100).toFixed(1) 
       : '0.0';
     ctx.fillText(`${item.winGames}胜 ${item.totalGames - item.winGames}负 胜率${winRate}%`, 
-      x + 80, y + height / 2 + 12);
+      x + 105, y + height / 2 + 12);
     
     // 最高连胜
     if (item.maxWinStreak && item.maxWinStreak > 0) {
