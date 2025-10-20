@@ -272,16 +272,15 @@ class MultiplayerGameScene {
         // 第二次点击同一位置，确认下棋
         console.log(`✅ 确认下棋: (${row}, ${col})`);
         this.previewPosition = null; // 清除预览
+        
+        // 播放下棋音效
+        this.playPlacePieceSound();
+        
         this.placePiece(row, col);
       } else {
         // 第一次点击或点击不同位置，显示预览
         console.log(`👆 预览位置: (${row}, ${col})`);
         this.previewPosition = { x: row, y: col };
-        
-        // 震动反馈
-        wx.vibrateShort({
-          type: 'light'
-        });
       }
     }
   }
@@ -649,7 +648,7 @@ class MultiplayerGameScene {
   }
   
   /**
-   * 绘制预览棋子（半透明，带提示）
+   * 绘制预览棋子（半透明，低调提示）
    */
   drawPreviewPiece(row, col, color) {
     const ctx = this.ctx;
@@ -660,22 +659,22 @@ class MultiplayerGameScene {
     ctx.save();
     
     // 设置半透明
-    ctx.globalAlpha = 0.6;
+    ctx.globalAlpha = 0.5;
     
-    // 绘制提示圈（虚线）
-    const pulseRadius = radius * 1.5;
-    ctx.strokeStyle = color === Config.PIECE.BLACK ? '#000000' : '#666666';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([5, 5]);
+    // 绘制提示圈（虚线圈）
+    const pulseRadius = radius * 1.2;
+    ctx.strokeStyle = color === Config.PIECE.BLACK ? '#000000' : '#999999';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([3, 3]); // 虚线
     ctx.beginPath();
     ctx.arc(x, y, pulseRadius, 0, Math.PI * 2);
     ctx.stroke();
     
     // 绘制半透明棋子
     if (color === Config.PIECE.BLACK) {
-      ctx.fillStyle = '#333333';
+      ctx.fillStyle = '#555555';
     } else {
-      ctx.fillStyle = '#DDDDDD';
+      ctx.fillStyle = '#CCCCCC';
     }
     
     ctx.beginPath();
@@ -684,16 +683,9 @@ class MultiplayerGameScene {
     
     // 绘制边框
     ctx.strokeStyle = color === Config.PIECE.BLACK ? '#000000' : '#999999';
-    ctx.lineWidth = 2;
-    ctx.setLineDash([]);
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]); // 恢复实线
     ctx.stroke();
-    
-    // 绘制"点击确认"文字
-    ctx.globalAlpha = 0.9;
-    ctx.fillStyle = '#FF6B6B';
-    ctx.font = 'bold 12px Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('再点一次', x, y + radius + 18);
     
     ctx.restore();
   }
@@ -743,6 +735,31 @@ class MultiplayerGameScene {
     ctx.stroke();
 
     ctx.restore();
+  }
+
+  /**
+   * 播放下棋音效
+   */
+  playPlacePieceSound() {
+    try {
+      // 使用微信API播放音效（短促的提示音）
+      const innerAudioContext = wx.createInnerAudioContext();
+      innerAudioContext.src = 'data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DqwGwhBSuBze/bfzgHJHfG7+CUPQkVXrLo7KRVFQ1Oo+HvumgeCyZ6yu3ahDMGHWq38+ylVhQNTp/i77ZoHgsmeMvs2oQzBhlptfDtpFQVDU2e4e+2aB4LJnjK7NqFMwYYabXv7aRUFQ1MnuHvtmgeCyZ4yuzahTMGGGm18O2kVBUNTJ7h77ZoHgsmeMrs2oUzBhhptfDtpFQVDU2e4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ1MnuHvtmgeCyZ4yuzahTMGGGm18O2kVBUNTJ7h77ZoHgsmeMrs2oUzBhhptfDtpFQVDU2e4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ1MnuHvtmgeCyZ4yuzahTMGGGm18O2kVBUNTJ7h77ZoHgsmecrs2oUzBhhptfDtpFQVDU2e4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ1MnuHvtmgeCyZ4yuzahTMGGGm18O2kVBUNTJ7h77ZoHgsmecrs2oUzBhhptfDtpFQVDU2e4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ1MnuHvtmgeCyZ4yuzahTMGGGm18O2kVBUNTJ7h77ZoHgsmecrs2oUzBhhptfDtpFQVDU2e4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ1MnuHvtmgeCyZ4yuzahTMGGGm18O2kVBUNTJ7h77ZoHgsmecrs2oUzBhhptfDtpFQVDU2e4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ1Mn+HvtmgeCyZ5yuzahTMGGGm18O2kVBUNTJ7h77ZoHgsmecrs2oUzBhhptfDtpFQVDU2f4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ1Mn+HvtmgeCyZ5yuzahTMGGGm18O2kVBUNTZ/h77ZoHgsmecrs2oUzBhhptfDtpFQVDU2f4e+2aB4LJnnK7NqFMwYYabXw7aRUFQ==';
+      innerAudioContext.volume = 0.3; // 音量30%（低调）
+      innerAudioContext.play();
+      
+      // 播放完成后销毁
+      innerAudioContext.onEnded(() => {
+        innerAudioContext.destroy();
+      });
+      
+      // 播放失败也销毁
+      innerAudioContext.onError(() => {
+        innerAudioContext.destroy();
+      });
+    } catch (error) {
+      console.log('音效播放失败:', error);
+    }
   }
 
   /**
