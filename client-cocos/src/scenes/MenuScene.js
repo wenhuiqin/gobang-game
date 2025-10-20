@@ -232,10 +232,10 @@ class MenuScene {
       SocketClient.off('matchError', onMatchError);
       SocketClient.off('matchCancelled', onMatchCancelled);
       
-      // 移除取消匹配的触摸事件监听
-      if (matchState.cancelHandler) {
-        wx.offTouchStart(matchState.cancelHandler);
-        matchState.cancelHandler = null;
+      // 清除取消匹配的定时器
+      if (matchState.cancelTimer) {
+        clearTimeout(matchState.cancelTimer);
+        matchState.cancelTimer = null;
       }
       
       // 立即关闭所有弹窗
@@ -284,12 +284,14 @@ class MenuScene {
       
       console.error('❌ 匹配错误:', data);
       
-      // 关闭Loading并移除取消事件监听
-      wx.hideLoading();
-      if (matchState.cancelHandler) {
-        wx.offTouchStart(matchState.cancelHandler);
-        matchState.cancelHandler = null;
+      // 清除定时器
+      if (matchState.cancelTimer) {
+        clearTimeout(matchState.cancelTimer);
+        matchState.cancelTimer = null;
       }
+      
+      // 关闭Loading
+      wx.hideLoading();
       
       wx.showToast({ title: data.message, icon: 'none' });
     };
@@ -298,12 +300,14 @@ class MenuScene {
     const onMatchCancelled = (data) => {
       console.log('✅ 取消匹配成功:', data);
       
-      // 关闭Loading并移除取消事件监听
-      wx.hideLoading();
-      if (matchState.cancelHandler) {
-        wx.offTouchStart(matchState.cancelHandler);
-        matchState.cancelHandler = null;
+      // 清除定时器
+      if (matchState.cancelTimer) {
+        clearTimeout(matchState.cancelTimer);
+        matchState.cancelTimer = null;
       }
+      
+      // 关闭Loading
+      wx.hideLoading();
     };
     
     console.log('📝 注册事件监听器: matchFound, matchJoined, matchError, matchCancelled');
@@ -318,7 +322,7 @@ class MenuScene {
     SocketClient.joinMatch(rating);
   }
   
-  // 显示匹配对话框（使用Loading，避免阻塞）
+  // 显示匹配对话框（5秒后自动弹出取消选项）
   showMatchModal(SocketClient, matchState) {
     console.log('💬 显示匹配Loading');
     console.log('📊 matchState:', matchState);
@@ -329,48 +333,79 @@ class MenuScene {
       return;
     }
     
-    // 使用Loading代替Modal，非阻塞
+    // 显示Loading状态
     wx.showLoading({
       title: '正在匹配...',
       mask: true
     });
     
-    // 添加一个取消匹配的提示Toast
-    setTimeout(() => {
+    // 5秒后自动弹出取消选项
+    const cancelTimer = setTimeout(() => {
       if (!matchState.found && !matchState.cancelled) {
-        wx.showToast({
-          title: '点击屏幕任意处取消匹配',
-          icon: 'none',
-          duration: 2000
-        });
+        this.showCancelMatchModal(SocketClient, matchState);
       }
-    }, 1000);
+    }, 5000);
     
-    // 监听用户点击屏幕取消匹配
-    const cancelHandler = () => {
-      if (!matchState.found && !matchState.cancelled) {
-        wx.showModal({
-          title: '取消匹配',
-          content: '确定要取消匹配吗？',
-          success: (res) => {
-            if (res.confirm) {
-              console.log('❌ 用户取消匹配');
-              matchState.cancelled = true;
-              SocketClient.cancelMatch();
-              wx.hideLoading();
-              wx.showToast({ title: '已取消匹配', icon: 'none' });
-              wx.offTouchStart(cancelHandler);
-            }
+    // 保存定时器以便清理
+    matchState.cancelTimer = cancelTimer;
+  }
+  
+  // 显示取消匹配的Modal
+  showCancelMatchModal(SocketClient, matchState) {
+    // 再次检查状态
+    if (matchState.cancelled || matchState.found) {
+      return;
+    }
+    
+    wx.showModal({
+      title: '正在匹配',
+      content: '正在为你寻找对手...\n已等待5秒',
+      showCancel: true,
+      cancelText: '取消匹配',
+      confirmText: '继续等待',
+      success: (res) => {
+        // 检查匹配状态（可能在对话框显示期间匹配成功了）
+        if (matchState.found) {
+          console.log('✅ 匹配已成功，对话框自动关闭');
+          wx.hideLoading();
+          return;
+        }
+        
+        if (!res.confirm) {
+          // 用户点击取消匹配
+          console.log('❌ 用户取消匹配');
+          matchState.cancelled = true;
+          
+          // 清除定时器
+          if (matchState.cancelTimer) {
+            clearTimeout(matchState.cancelTimer);
+            matchState.cancelTimer = null;
           }
-        });
+          
+          SocketClient.cancelMatch();
+          wx.hideLoading();
+          wx.showToast({ title: '已取消匹配', icon: 'none' });
+        } else if (!matchState.cancelled && !matchState.found) {
+          // 用户点击继续等待，继续显示Loading，5秒后再次弹出
+          console.log('♻️ 用户选择继续等待');
+          wx.showLoading({
+            title: '正在匹配...',
+            mask: true
+          });
+          
+          const cancelTimer = setTimeout(() => {
+            if (!matchState.found && !matchState.cancelled) {
+              this.showCancelMatchModal(SocketClient, matchState);
+            }
+          }, 5000);
+          
+          matchState.cancelTimer = cancelTimer;
+        }
+      },
+      fail: (err) => {
+        console.log('⚠️ 对话框显示失败:', err);
       }
-    };
-    
-    // 临时绑定取消事件
-    wx.onTouchStart(cancelHandler);
-    
-    // 保存handler以便清理
-    matchState.cancelHandler = cancelHandler;
+    });
   }
   
   showFriendOptions() {

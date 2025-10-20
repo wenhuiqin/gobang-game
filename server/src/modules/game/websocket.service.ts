@@ -114,17 +114,21 @@ export class WebSocketService implements OnModuleInit {
    */
   private async handleJoinMatch(ws: WebSocketClient, data: any) {
     const { userId, rating } = data;
+    
+    // 确保 userId 是字符串类型
+    const userIdStr = String(userId);
 
-    this.logger.log(`📥 收到加入匹配请求: userId=${userId}, rating=${rating}`);
+    this.logger.log(`📥 收到加入匹配请求: userId=${userIdStr}, rating=${rating}`);
 
     // 检查是否已在队列中，如果在则先移除（避免重复）
     const queueData = await this.redisService.lrange(REDIS_KEYS.MATCH_QUEUE, 0, -1);
     for (const item of queueData) {
       try {
         const parsed = JSON.parse(item);
-        if (parsed.userId === userId) {
+        // 比较时也转换为字符串
+        if (String(parsed.userId) === userIdStr) {
           await this.redisService.lrem(REDIS_KEYS.MATCH_QUEUE, 1, item);
-          this.logger.log(`移除用户的旧匹配请求: userId=${userId}`);
+          this.logger.log(`移除用户的旧匹配请求: userId=${userIdStr}`);
           break;
         }
       } catch (err) {
@@ -132,10 +136,10 @@ export class WebSocketService implements OnModuleInit {
       }
     }
 
-    // 加入队列
+    // 加入队列（使用字符串类型的 userId）
     await this.redisService.rpush(
       REDIS_KEYS.MATCH_QUEUE,
-      JSON.stringify({ userId, rating, timestamp: Date.now() })
+      JSON.stringify({ userId: userIdStr, rating, timestamp: Date.now() })
     );
 
     this.send(ws, 'matchJoined', { message: '已加入匹配队列' });
@@ -149,13 +153,17 @@ export class WebSocketService implements OnModuleInit {
    */
   private async handleCancelMatch(ws: WebSocketClient, data: any) {
     const { userId } = data;
+    
+    // 确保 userId 是字符串类型
+    const userIdStr = String(userId);
 
-    this.logger.log(`用户取消匹配: userId=${userId}`);
+    this.logger.log(`用户取消匹配: userId=${userIdStr}`);
 
     const queueData = await this.redisService.lrange(REDIS_KEYS.MATCH_QUEUE, 0, -1);
     for (const item of queueData) {
       const parsed = JSON.parse(item);
-      if (parsed.userId === userId) {
+      // 比较时也转换为字符串
+      if (String(parsed.userId) === userIdStr) {
         await this.redisService.lrem(REDIS_KEYS.MATCH_QUEUE, 1, item);
         break;
       }
@@ -177,12 +185,58 @@ export class WebSocketService implements OnModuleInit {
     const players = queueData.map(item => JSON.parse(item));
     const player1 = players[0];
     const player2 = players[1];
+    
+    this.logger.log(`📋 原始队列数据: player1=${JSON.stringify(player1)}, player2=${JSON.stringify(player2)}`);
+    
+    // 确保 userId 是字符串类型（与 WebSocket 连接时的类型一致）
+    player1.userId = String(player1.userId);
+    player2.userId = String(player2.userId);
 
-    this.logger.log(`匹配成功: ${player1.userId} vs ${player2.userId}`);
+    this.logger.log(`🎯 准备匹配: ${player1.userId}(${typeof player1.userId}) vs ${player2.userId}(${typeof player2.userId})`);
 
-    // 从队列中移除
+    // 先检查两个玩家的WebSocket连接，再从队列移除（避免时序问题）
+    const client1 = this.clients.get(player1.userId);
+    const client2 = this.clients.get(player2.userId);
+    
+    this.logger.log(`🔍 提前检查连接: player1=${player1.userId}, client1=${!!client1}, player2=${player2.userId}, client2=${!!client2}`);
+    this.logger.log(`🔍 当前在线客户端: ${Array.from(this.clients.keys()).map(k => `${k}(${typeof k})`).join(', ')}`);
+    
+    // 如果有任何一个玩家断线，不从队列移除，直接返回
+    if (!client1 || !client2) {
+      this.logger.error(`❌ 匹配失败：玩家断线 (player1=${!!client1}, player2=${!!client2})，保留在线玩家在队列`);
+      
+      // 只移除断线的玩家
+      if (!client1) {
+        await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
+        this.logger.log(`🗑️ 移除断线玩家1: ${player1.userId}`);
+        if (client2) {
+          this.send(client2, 'matchError', { message: '对手连接异常，正在重新匹配...' });
+        }
+      } else if (!client2) {
+        // 移除第二个玩家（需要先移除第一个再移除第二个，因为lpop是从头部移除）
+        await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
+        await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
+        // 把第一个玩家重新加入队列
+        await this.redisService.rpush(
+          REDIS_KEYS.MATCH_QUEUE,
+          JSON.stringify({ userId: player1.userId, rating: player1.rating, timestamp: Date.now() })
+        );
+        this.logger.log(`🗑️ 移除断线玩家2: ${player2.userId}, 玩家1重新入队`);
+        if (client1) {
+          this.send(client1, 'matchError', { message: '对手连接异常，正在重新匹配...' });
+        }
+      }
+      
+      // 尝试继续匹配
+      setTimeout(() => this.tryMatch(), 1000);
+      return;
+    }
+    
+    // 两个玩家都在线，从队列中移除
     await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
     await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
+    
+    this.logger.log(`✅ 匹配成功: ${player1.userId} vs ${player2.userId}`);
 
     // 获取双方用户信息
     const [user1Info, user2Info] = await Promise.all([
@@ -219,46 +273,7 @@ export class WebSocketService implements OnModuleInit {
       7200
     );
 
-    // 检查两个玩家的WebSocket连接
-    const client1 = this.clients.get(player1.userId);
-    const client2 = this.clients.get(player2.userId);
-
-    this.logger.log(`🔍 查找WebSocket连接: player1=${player1.userId}, client1=${!!client1}, player2=${player2.userId}, client2=${!!client2}`);
-
-    // 如果有任何一个玩家断线，取消匹配并重新加入队列
-    if (!client1 || !client2) {
-      this.logger.error(`❌ 匹配失败：玩家断线 (player1=${!!client1}, player2=${!!client2})`);
-      
-      // 删除刚创建的房间
-      await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
-      
-      // 将在线的玩家重新加入队列
-      if (client1) {
-        this.logger.log(`♻️ 玩家1 (${player1.userId}) 重新加入队列`);
-        await this.redisService.rpush(
-          REDIS_KEYS.MATCH_QUEUE,
-          JSON.stringify({ userId: player1.userId, rating: player1.rating, timestamp: Date.now() })
-        );
-        this.send(client1, 'matchError', { message: '对手连接异常，正在重新匹配...' });
-      }
-      
-      if (client2) {
-        this.logger.log(`♻️ 玩家2 (${player2.userId}) 重新加入队列`);
-        await this.redisService.rpush(
-          REDIS_KEYS.MATCH_QUEUE,
-          JSON.stringify({ userId: player2.userId, rating: player2.rating, timestamp: Date.now() })
-        );
-        this.send(client2, 'matchError', { message: '对手连接异常，正在重新匹配...' });
-      }
-      
-      // 尝试继续匹配
-      setTimeout(() => this.tryMatch(), 1000);
-      return;
-    }
-
-    // 两个玩家都在线，通知匹配成功
-    this.logger.log(`✅ 两个玩家都在线，通知匹配成功`);
-    
+    // 两个玩家都已在线（前面已检查），通知匹配成功
     this.logger.log(`📤 通知玩家1 (${player1.userId}): 匹配成功，yourColor=1`);
     this.send(client1, 'matchFound', {
       roomId,
