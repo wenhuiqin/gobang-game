@@ -235,7 +235,7 @@ class MultiplayerGameScene {
           title: title,
           content: message,
           showCancel: true,
-          confirmText: '返回菜单',
+          confirmText: '再来一局',
           cancelText: '查看棋局',
           success: (res) => {
             if (res.confirm) {
@@ -433,7 +433,7 @@ class MultiplayerGameScene {
         title: isMyWin ? '你赢了！🎉' : '你输了！',
         content: isMyWin ? '恭喜获胜！' : '再接再厉！',
         showCancel: true,
-        confirmText: '返回菜单',
+        confirmText: '再来一局',
         cancelText: '查看棋局',
         success: (res) => {
           if (res.confirm) {

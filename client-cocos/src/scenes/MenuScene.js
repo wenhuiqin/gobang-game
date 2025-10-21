@@ -252,18 +252,31 @@ class MenuScene {
       
       console.log(`🎮 准备进入对战房间 ${roomId}，你是${colorText}，对手：${opponentName}`);
       
-      // 如果Modal正在显示，用新的Modal覆盖它（显示匹配成功信息）
+      // 用Modal覆盖可能存在的"正在匹配"Modal，然后自动进入游戏
       wx.showModal({
         title: '匹配成功！',
         content: `对手：${opponentName}\n你是${colorText}`,
         showCancel: false,
-        confirmText: '开始游戏',
+        confirmText: '进入游戏',
         success: () => {
-          console.log(`🎮 进入游戏`);
+          if (!matchState.gameStarted) {
+            console.log(`🎮 进入游戏（用户点击）`);
+            matchState.gameStarted = true;
+            const SceneManager = require('../utils/SceneManager.js');
+            SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
+          }
+        }
+      });
+      
+      // 同时设置2秒后自动进入游戏（防止用户不点击）
+      setTimeout(() => {
+        if (!matchState.gameStarted) {
+          console.log(`🎮 自动进入游戏`);
+          matchState.gameStarted = true;
           const SceneManager = require('../utils/SceneManager.js');
           SceneManager.startMultiplayerGame(roomId, yourColor, opponent);
         }
-      });
+      }, 2000);
     };
     
     // 监听加入队列成功
