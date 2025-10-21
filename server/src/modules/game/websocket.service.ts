@@ -144,10 +144,10 @@ export class WebSocketService implements OnModuleInit {
 
     this.send(ws, 'matchJoined', { message: '已加入匹配队列' });
 
-    // 延迟100ms后尝试匹配，给WebSocket连接一些缓冲时间
+    // 延迟200ms后尝试匹配，给WebSocket连接充足的缓冲时间
     setTimeout(() => {
       this.tryMatch();
-    }, 100);
+    }, 200);
   }
 
   /**
@@ -183,85 +183,65 @@ export class WebSocketService implements OnModuleInit {
     if (queueData.length < 2) {
       return;
     }
-
-    const players = queueData.map(item => JSON.parse(item));
-    const player1 = players[0];
-    const player2 = players[1];
     
-    this.logger.log(`📋 原始队列数据: player1=${JSON.stringify(player1)}, player2=${JSON.stringify(player2)}`);
+    this.logger.log(`📋 队列中有 ${queueData.length} 个玩家，开始匹配前清理断线用户...`);
     
-    // 确保 userId 是字符串类型（与 WebSocket 连接时的类型一致）
-    player1.userId = String(player1.userId);
-    player2.userId = String(player2.userId);
-
-    this.logger.log(`🎯 准备匹配: ${player1.userId}(${typeof player1.userId}) vs ${player2.userId}(${typeof player2.userId})`);
-
-    // 先检查两个玩家的WebSocket连接，再从队列移除（避免时序问题）
-    let client1 = this.clients.get(player1.userId);
-    let client2 = this.clients.get(player2.userId);
-    
-    // 检查连接是否真的可用（不仅存在，还要检查状态）
-    const isClient1Ready = client1 && client1.readyState === 1; // 1 = OPEN
-    const isClient2Ready = client2 && client2.readyState === 1;
-    
-    this.logger.log(`🔍 第一次检查连接: player1=${player1.userId}, client1=${!!client1}, ready=${isClient1Ready}, player2=${player2.userId}, client2=${!!client2}, ready=${isClient2Ready}`);
-    
-    // 如果有连接不就绪，等待50ms后再检查一次（处理时序竞态）
-    if (!isClient1Ready || !isClient2Ready) {
-      this.logger.warn(`⚠️ 发现连接未就绪，等待50ms后重新检查...`);
-      await new Promise(resolve => setTimeout(resolve, 50));
-      
-      client1 = this.clients.get(player1.userId);
-      client2 = this.clients.get(player2.userId);
-      
-      const isClient1Ready2 = client1 && client1.readyState === 1;
-      const isClient2Ready2 = client2 && client2.readyState === 1;
-      
-      this.logger.log(`🔍 第二次检查连接: player1=${player1.userId}, client1=${!!client1}, ready=${isClient1Ready2}, player2=${player2.userId}, client2=${!!client2}, ready=${isClient2Ready2}`);
-      
-      // 更新就绪状态
-      if (!isClient1Ready2 || !isClient2Ready2) {
-        this.logger.log(`🔍 当前在线客户端: ${Array.from(this.clients.keys()).map(k => `${k}(${typeof k})`).join(', ')}`);
+    // 关键修复：先清理队列中所有断线的用户
+    const validPlayers = [];
+    for (const item of queueData) {
+      try {
+        const player = JSON.parse(item);
+        const userId = String(player.userId);
+        const client = this.clients.get(userId);
+        
+        // 检查连接是否有效
+        if (client && client.readyState === 1) {
+          validPlayers.push({ 
+            ...player, 
+            userId,
+            _rawItem: item  // 保存原始字符串，用于后续精确移除
+          });
+        } else {
+          // 移除断线用户
+          await this.redisService.lrem(REDIS_KEYS.MATCH_QUEUE, 1, item);
+          this.logger.log(`🗑️ 清理断线用户: ${userId}`);
+        }
+      } catch (err) {
+        this.logger.error('解析队列数据错误:', err);
+        await this.redisService.lrem(REDIS_KEYS.MATCH_QUEUE, 1, item);
       }
     }
     
-    // 如果仍然有玩家断线或连接未就绪，从队列移除并处理
+    this.logger.log(`✅ 清理后，队列中有 ${validPlayers.length} 个在线玩家`);
+    
+    // 清理后如果不足2人，退出
+    if (validPlayers.length < 2) {
+      this.logger.log('⚠️ 在线玩家不足2人，等待更多玩家加入');
+      return;
+    }
+
+    const player1 = validPlayers[0];
+    const player2 = validPlayers[1];
+    
+    this.logger.log(`📋 匹配玩家: player1=${JSON.stringify(player1)}, player2=${JSON.stringify(player2)}`);
+    this.logger.log(`🎯 准备匹配: ${player1.userId}(${typeof player1.userId}) vs ${player2.userId}(${typeof player2.userId})`);
+
+    // 获取连接（已经在清理阶段验证过，这里是最后确认）
+    const client1 = this.clients.get(player1.userId);
+    const client2 = this.clients.get(player2.userId);
+    
+    // 最后一次安全检查（理论上不会失败，因为刚清理过）
     if (!client1 || !client2 || client1.readyState !== 1 || client2.readyState !== 1) {
-      this.logger.error(`❌ 匹配失败：玩家断线 (player1=${!!client1}, player2=${!!client2})，保留在线玩家在队列`);
-      
-      // 只移除断线或未就绪的玩家
-      const isClient1Ok = client1 && client1.readyState === 1;
-      const isClient2Ok = client2 && client2.readyState === 1;
-      
-      if (!isClient1Ok) {
-        await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
-        this.logger.log(`🗑️ 移除断线/未就绪玩家1: ${player1.userId}`);
-        if (isClient2Ok) {
-          this.send(client2, 'matchError', { message: '对手连接异常，正在重新匹配...' });
-        }
-      } else if (!isClient2Ok) {
-        // 移除第二个玩家（需要先移除第一个再移除第二个，因为lpop是从头部移除）
-        await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
-        await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
-        // 把第一个玩家重新加入队列
-        await this.redisService.rpush(
-          REDIS_KEYS.MATCH_QUEUE,
-          JSON.stringify({ userId: player1.userId, rating: player1.rating, timestamp: Date.now() })
-        );
-        this.logger.log(`🗑️ 移除断线/未就绪玩家2: ${player2.userId}, 玩家1重新入队`);
-        if (isClient1Ok) {
-          this.send(client1, 'matchError', { message: '对手连接异常，正在重新匹配...' });
-        }
-      }
-      
-      // 尝试继续匹配（缩短延迟）
+      this.logger.error(`❌ 异常：清理后的玩家连接仍不可用，重新尝试`);
       setTimeout(() => this.tryMatch(), 200);
       return;
     }
     
-    // 两个玩家都在线，从队列中移除
-    await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
-    await this.redisService.lpop(REDIS_KEYS.MATCH_QUEUE);
+    this.logger.log(`✅ 连接验证通过，开始创建房间`);
+    
+    // 从队列中移除这两个玩家（使用原始字符串，确保精确匹配）
+    await this.redisService.lrem(REDIS_KEYS.MATCH_QUEUE, 1, player1._rawItem);
+    await this.redisService.lrem(REDIS_KEYS.MATCH_QUEUE, 1, player2._rawItem);
     
     this.logger.log(`✅ 匹配成功: ${player1.userId} vs ${player2.userId}`);
 
