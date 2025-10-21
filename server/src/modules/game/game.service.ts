@@ -328,5 +328,49 @@ export class GameService {
     
     console.log(`✅ 人机对战结果已记录: 用户${userId} ${playerWon ? '胜利' : '失败'}`);
   }
+
+  /**
+   * 记录在线对战结果
+   */
+  async recordOnlineGame(
+    roomId: string,
+    player1Id: string,
+    player2Id: string,
+    winnerId: string,
+    board: number[][],
+    startedAt?: Date,
+  ): Promise<void> {
+    const endedAt = new Date();
+    const start = startedAt || new Date(Date.now() - 600000); // 默认10分钟前开始
+    
+    // 计算步数
+    const totalSteps = board
+      ? board.flat().filter((cell: number) => cell !== 0).length
+      : 0;
+    
+    // 确定游戏结果（player1是黑方）
+    const isPlayer1Win = winnerId === player1Id;
+    const gameResult = isPlayer1Win ? GameResult.BLACK_WIN : GameResult.WHITE_WIN;
+    
+    // 保存游戏记录
+    const gameRecord = this.gameRecordRepository.create({
+      roomId,
+      gameType: GameType.ONLINE_MATCH,  // 在线匹配
+      blackPlayerId: player1Id,  // player1固定是黑方
+      whitePlayerId: player2Id,  // player2固定是白方
+      winnerId,
+      gameResult,
+      totalSteps,
+      duration: Math.floor((endedAt.getTime() - start.getTime()) / 1000),
+      gameData: board ? JSON.stringify(board) : null,
+      aiDifficulty: null,
+      startedAt: start,
+      endedAt,
+    });
+
+    await this.gameRecordRepository.save(gameRecord);
+    
+    console.log(`✅ 在线对战结果已记录到game_records: roomId=${roomId}, winner=${winnerId}`);
+  }
 }
 

@@ -299,6 +299,7 @@ export class WebSocketService implements OnModuleInit {
         roomId,
         player1: player1.userId,
         player2: player2.userId,
+        startedAt: new Date().toISOString(),  // 记录游戏开始时间
         player1Info: user1Info ? {
           id: user1Info.id,
           nickname: user1Info.nickname,
@@ -732,6 +733,17 @@ export class WebSocketService implements OnModuleInit {
       );
       
       this.logger.log(`✅ 用户战绩已更新: ${player1Id}(${isBlackWin ? 'WIN' : 'LOSE'}), ${player2Id}(${isBlackWin ? 'LOSE' : 'WIN'})`);
+      
+      // 保存游戏记录到 game_records 表
+      const startedAt = room.startedAt ? new Date(room.startedAt) : undefined;
+      await this.gameService.recordOnlineGame(
+        roomId,
+        player1Id,
+        player2Id,
+        winnerId,
+        room.board,
+        startedAt,
+      );
       
       // 删除Redis中的房间数据
       await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
