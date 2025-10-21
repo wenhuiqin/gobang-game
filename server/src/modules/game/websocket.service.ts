@@ -139,6 +139,12 @@ export class WebSocketService implements OnModuleInit {
       case 'requestBoardSync':
         await this.handleBoardSync(ws, data);
         break;
+      case 'restartGame':
+        await this.handleRestartGame(ws, data);
+        break;
+      case 'restartGameResponse':
+        await this.handleRestartGameResponse(ws, data);
+        break;
       default:
         this.logger.warn(`未知事件: ${event}`);
     }
@@ -731,6 +737,116 @@ export class WebSocketService implements OnModuleInit {
       await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
     } catch (error) {
       this.logger.error(`❌ 保存游戏记录失败:`, error);
+    }
+  }
+
+  /**
+   * 处理重新开始游戏请求（好友对战）
+   */
+  private async handleRestartGame(ws: WebSocketClient, data: any) {
+    const { roomId, userId } = data;
+    const userIdStr = String(userId);
+
+    this.logger.log(`🔄 收到重新开始请求: roomId=${roomId}, userId=${userIdStr}`);
+
+    // 获取房间信息
+    const roomData = await this.redisService.get(REDIS_KEYS.GAME_ROOM(roomId));
+    if (!roomData) {
+      this.logger.error(`❌ 房间不存在: ${roomId}`);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+          event: 'error', 
+          data: { message: '房间不存在' } 
+        }));
+      }
+      return;
+    }
+
+    const room = JSON.parse(roomData);
+    const player1Id = String(room.player1);
+    const player2Id = String(room.player2);
+
+    // 确定对手ID
+    const opponentId = userIdStr === player1Id ? player2Id : player1Id;
+
+    // 通知对手
+    const opponentClient = this.clients.get(opponentId);
+    if (opponentClient && opponentClient.readyState === WebSocket.OPEN) {
+      opponentClient.send(JSON.stringify({
+        event: 'restartGameRequest',
+        data: {
+          roomId,
+          requesterId: userIdStr,
+        }
+      }));
+      this.logger.log(`✅ 已通知对手: ${opponentId}`);
+    } else {
+      this.logger.error(`❌ 对手不在线: ${opponentId}`);
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ 
+          event: 'error', 
+          data: { message: '对手已离线' } 
+        }));
+      }
+    }
+  }
+
+  /**
+   * 处理重新开始游戏的响应
+   */
+  private async handleRestartGameResponse(ws: WebSocketClient, data: any) {
+    const { roomId, userId, accepted } = data;
+    const userIdStr = String(userId);
+
+    this.logger.log(`📨 收到重新开始响应: roomId=${roomId}, userId=${userIdStr}, accepted=${accepted}`);
+
+    // 获取房间信息
+    const roomData = await this.redisService.get(REDIS_KEYS.GAME_ROOM(roomId));
+    if (!roomData) {
+      this.logger.error(`❌ 房间不存在: ${roomId}`);
+      return;
+    }
+
+    const room = JSON.parse(roomData);
+    const player1Id = String(room.player1);
+    const player2Id = String(room.player2);
+
+    // 确定对手ID（发起请求的人）
+    const requesterId = userIdStr === player1Id ? player2Id : player1Id;
+
+    // 通知发起请求的玩家
+    const requesterClient = this.clients.get(requesterId);
+    if (requesterClient && requesterClient.readyState === WebSocket.OPEN) {
+      requesterClient.send(JSON.stringify({
+        event: 'gameRestarted',
+        data: {
+          roomId,
+          accepted,
+        }
+      }));
+
+      if (accepted) {
+        this.logger.log(`✅ 双方同意重新开始，重置房间: ${roomId}`);
+
+        // 重置房间状态
+        room.board = Array(15)
+          .fill(null)
+          .map(() => Array(15).fill(0));
+        room.currentPlayer = 1; // 黑方先手
+        room.lastMove = null;
+
+        // 保存重置后的房间
+        await this.redisService.set(
+          REDIS_KEYS.GAME_ROOM(roomId),
+          JSON.stringify(room),
+          3600,
+        );
+
+        // 通知双方棋盘已重置（可选，前端已经自己重置了）
+        this.logger.log(`🎮 房间 ${roomId} 已重置`);
+      } else {
+        this.logger.log(`❌ 对手拒绝重新开始: ${roomId}`);
+      }
     }
   }
 }

@@ -239,12 +239,68 @@ class MultiplayerGameScene {
           cancelText: '查看棋局',
           success: (res) => {
             if (res.confirm) {
-              this.returnToMenu();
+              this.playAgain();
             }
             // res.cancel 时不做任何操作，保留当前棋局和获胜连线
           },
         });
       }, 500); // 延迟500ms再显示弹窗
+    });
+
+    // 监听对方发起的重新开始请求
+    SocketClient.on('restartGameRequest', (data) => {
+      console.log('📨 收到对方的重新开始请求:', data);
+      
+      wx.showModal({
+        title: '对方邀请',
+        content: '对方想再来一局，是否同意？',
+        confirmText: '同意',
+        cancelText: '拒绝',
+        success: (res) => {
+          if (res.confirm) {
+            // 同意重新开始
+            SocketClient.send('restartGameResponse', {
+              roomId: this.roomId,
+              userId: this.userId,
+              accepted: true
+            });
+            
+            // 重置本地棋盘
+            this.resetBoard();
+          } else {
+            // 拒绝重新开始
+            SocketClient.send('restartGameResponse', {
+              roomId: this.roomId,
+              userId: this.userId,
+              accepted: false
+            });
+            
+            wx.showToast({
+              title: '已拒绝',
+              icon: 'none'
+            });
+          }
+        }
+      });
+    });
+    
+    // 监听重新开始的响应
+    SocketClient.on('gameRestarted', (data) => {
+      console.log('✅ 游戏已重新开始:', data);
+      
+      wx.hideToast();
+      
+      if (data.accepted) {
+        // 对方同意，重置棋盘
+        this.resetBoard();
+      } else {
+        // 对方拒绝
+        wx.showToast({
+          title: '对方拒绝了',
+          icon: 'none',
+          duration: 2000
+        });
+      }
     });
 
     // 监听错误
@@ -437,12 +493,91 @@ class MultiplayerGameScene {
         cancelText: '查看棋局',
         success: (res) => {
           if (res.confirm) {
-            this.returnToMenu();
+            this.playAgain();
           }
           // res.cancel 时不做任何操作，保留当前棋局和获胜连线
         },
       });
     }, 500); // 延迟500ms再显示弹窗
+  }
+
+  /**
+   * 再来一局
+   */
+  playAgain() {
+    const SocketClient = require('../api/SocketClient.js');
+    const SceneManager = require('../utils/SceneManager.js');
+    
+    // 判断游戏类型
+    const isRandomMatch = this.roomId.startsWith('match_');
+    
+    if (isRandomMatch) {
+      // 随机匹配：清除上下文，回到菜单并自动开始新的匹配
+      console.log('🔄 随机匹配模式，回到菜单并自动重新匹配');
+      SocketClient.clearContext();
+      SceneManager.switchScene('menu');
+      
+      // 延迟一点让场景切换完成，然后自动触发匹配
+      setTimeout(() => {
+        const menuScene = SceneManager.instance.currentScene;
+        if (menuScene && menuScene.startRandomMatch) {
+          menuScene.startRandomMatch();
+        }
+      }, 500);
+    } else {
+      // 好友对战：保留房间，重置棋盘
+      console.log('👥 好友对战模式，重置棋盘继续在同一房间');
+      
+      wx.showModal({
+        title: '再来一局？',
+        content: '是否邀请对方再来一局？',
+        confirmText: '确定',
+        cancelText: '取消',
+        success: (res) => {
+          if (res.confirm) {
+            // 发送重新开始请求到服务器
+            SocketClient.send('restartGame', {
+              roomId: this.roomId,
+              userId: this.userId
+            });
+            
+            // 重置本地棋盘
+            this.resetBoard();
+            
+            wx.showToast({
+              title: '等待对方确认...',
+              icon: 'loading',
+              duration: 3000
+            });
+          }
+        }
+      });
+    }
+  }
+  
+  /**
+   * 重置棋盘（不离开房间）
+   */
+  resetBoard() {
+    console.log('🔄 重置棋盘');
+    
+    // 重置棋盘状态
+    this.board = Array(Config.BOARD_SIZE).fill(null).map(() => Array(Config.BOARD_SIZE).fill(0));
+    this.currentPlayer = Config.PIECE.BLACK;
+    this.gameOver = false;
+    this.winner = null;
+    this.winningLine = null;
+    this.lastMove = null;
+    this.previewPosition = null;
+    
+    // 重新渲染
+    this.render();
+    
+    wx.showToast({
+      title: '游戏已重置',
+      icon: 'success',
+      duration: 1500
+    });
   }
 
   /**
