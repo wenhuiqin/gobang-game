@@ -2,7 +2,9 @@ import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { WebSocketServer, WebSocket } from 'ws';
 import { RedisService } from '@/shared/redis/redis.service';
 import { UserService } from '../user/user.service';
+import { GameService } from './game.service';
 import { REDIS_KEYS } from '@/common/constants/redis-keys.constants';
+import { GameType, GameResult } from '@/common/constants/game.constants';
 import * as url from 'url';
 
 interface WebSocketClient extends WebSocket {
@@ -19,6 +21,7 @@ export class WebSocketService implements OnModuleInit {
   constructor(
     private readonly redisService: RedisService,
     private readonly userService: UserService,
+    private readonly gameService: GameService,
   ) {}
 
   onModuleInit() {
@@ -411,6 +414,24 @@ export class WebSocketService implements OnModuleInit {
     } else {
       this.logger.error(`❌ 玩家2 (${player2Id}) WebSocket未找到`);
     }
+
+    // 检查是否获胜
+    if (this.checkWin(room.board, x, y, playerColor)) {
+      const winnerId = userIdStr;
+      this.logger.log(`🏆 玩家 ${winnerId} 获胜！`);
+      
+      // 保存游戏记录和战绩
+      await this.saveGameResult(roomId, room, winnerId, 'win');
+      
+      // 通知双方游戏结束
+      const gameOverData = { winner: winnerId, reason: 'win' };
+      if (client1) {
+        this.send(client1, 'gameOver', gameOverData);
+      }
+      if (client2) {
+        this.send(client2, 'gameOver', gameOverData);
+      }
+    }
   }
 
   /**
@@ -437,7 +458,8 @@ export class WebSocketService implements OnModuleInit {
     
     this.logger.log(`🏳️ 用户 ${userId} 认输，获胜者: ${winnerId}`);
 
-    await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
+    // 保存游戏记录和战绩
+    await this.saveGameResult(roomId, room, String(winnerId), 'surrender');
 
     const client1 = this.clients.get(room.player1);
     const client2 = this.clients.get(room.player2);
@@ -619,6 +641,96 @@ export class WebSocketService implements OnModuleInit {
     } else {
       this.logger.error(`❌ 创建者 ${creatorId} 未连接WebSocket`);
       this.logger.error(`❌ 可用的连接ID: ${Array.from(this.clients.keys()).join(', ')}`);
+    }
+  }
+
+  /**
+   * 检查是否获胜（五子连珠）
+   */
+  private checkWin(board: number[][], x: number, y: number, color: number): boolean {
+    const BOARD_SIZE = 15;
+    const WIN_COUNT = 5;
+    
+    // 四个方向：横、竖、左斜、右斜
+    const directions = [
+      [[0, 1], [0, -1]], // 横向
+      [[1, 0], [-1, 0]], // 纵向
+      [[1, 1], [-1, -1]], // 左斜
+      [[1, -1], [-1, 1]], // 右斜
+    ];
+
+    for (const [dir1, dir2] of directions) {
+      let count = 1; // 当前棋子
+
+      // 正方向
+      for (let i = 1; i < WIN_COUNT; i++) {
+        const nx = x + dir1[0] * i;
+        const ny = y + dir1[1] * i;
+        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+        if (board[nx][ny] !== color) break;
+        count++;
+      }
+
+      // 反方向
+      for (let i = 1; i < WIN_COUNT; i++) {
+        const nx = x + dir2[0] * i;
+        const ny = y + dir2[1] * i;
+        if (nx < 0 || nx >= BOARD_SIZE || ny < 0 || ny >= BOARD_SIZE) break;
+        if (board[nx][ny] !== color) break;
+        count++;
+      }
+
+      if (count >= WIN_COUNT) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * 保存游戏结果
+   */
+  private async saveGameResult(
+    roomId: string,
+    room: any,
+    winnerId: string,
+    reason: string,
+  ): Promise<void> {
+    try {
+      const player1Id = String(room.player1);
+      const player2Id = String(room.player2);
+      const isBlackWin = winnerId === player1Id;
+      
+      this.logger.log(`💾 保存游戏记录: roomId=${roomId}, winner=${winnerId}, reason=${reason}`);
+      
+      // 计算步数
+      const totalSteps = room.board
+        ? room.board.flat().filter((cell: number) => cell !== 0).length
+        : 0;
+      
+      // 确定游戏结果
+      const gameResult = isBlackWin ? GameResult.BLACK_WIN : GameResult.WHITE_WIN;
+      
+      // 更新用户战绩
+      await this.userService.updateGameStats(
+        player1Id,
+        isBlackWin ? 'win' : 'lose',
+        isBlackWin ? 20 : -10,
+      );
+
+      await this.userService.updateGameStats(
+        player2Id,
+        isBlackWin ? 'lose' : 'win',
+        isBlackWin ? -10 : 20,
+      );
+      
+      this.logger.log(`✅ 用户战绩已更新: ${player1Id}(${isBlackWin ? 'WIN' : 'LOSE'}), ${player2Id}(${isBlackWin ? 'LOSE' : 'WIN'})`);
+      
+      // 删除Redis中的房间数据
+      await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
+    } catch (error) {
+      this.logger.error(`❌ 保存游戏记录失败:`, error);
     }
   }
 }
