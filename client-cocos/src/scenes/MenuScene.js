@@ -232,13 +232,7 @@ class MenuScene {
       SocketClient.off('matchError', onMatchError);
       SocketClient.off('matchCancelled', onMatchCancelled);
       
-      // 清除取消匹配的定时器
-      if (matchState.cancelTimer) {
-        clearTimeout(matchState.cancelTimer);
-        matchState.cancelTimer = null;
-      }
-      
-      // 立即关闭所有弹窗
+      // 立即关闭所有弹窗（包括Modal）
       console.log('🚫 关闭所有弹窗');
       wx.hideLoading();
       wx.hideToast();
@@ -284,30 +278,12 @@ class MenuScene {
       
       console.error('❌ 匹配错误:', data);
       
-      // 清除定时器
-      if (matchState.cancelTimer) {
-        clearTimeout(matchState.cancelTimer);
-        matchState.cancelTimer = null;
-      }
-      
-      // 关闭Loading
-      wx.hideLoading();
-      
       wx.showToast({ title: data.message, icon: 'none' });
     };
     
     // 监听取消成功
     const onMatchCancelled = (data) => {
       console.log('✅ 取消匹配成功:', data);
-      
-      // 清除定时器
-      if (matchState.cancelTimer) {
-        clearTimeout(matchState.cancelTimer);
-        matchState.cancelTimer = null;
-      }
-      
-      // 关闭Loading
-      wx.hideLoading();
     };
     
     console.log('📝 注册事件监听器: matchFound, matchJoined, matchError, matchCancelled');
@@ -322,84 +298,38 @@ class MenuScene {
     SocketClient.joinMatch(rating);
   }
   
-  // 显示匹配对话框（5秒后自动弹出取消选项）
+  // 显示匹配对话框（持续显示，直到匹配成功或用户主动取消）
   showMatchModal(SocketClient, matchState) {
-    console.log('💬 显示匹配Loading');
+    console.log('💬 显示匹配Modal');
     console.log('📊 matchState:', matchState);
     
     // 检查是否已经匹配成功或取消
     if (matchState.cancelled || matchState.found) {
-      console.log('⚠️ 匹配状态已变更，不再显示Loading');
+      console.log('⚠️ 匹配状态已变更，不显示Modal');
       return;
     }
     
-    // 显示Loading状态
-    wx.showLoading({
-      title: '正在匹配...',
-      mask: true
-    });
-    
-    // 5秒后自动弹出取消选项
-    const cancelTimer = setTimeout(() => {
-      if (!matchState.found && !matchState.cancelled) {
-        this.showCancelMatchModal(SocketClient, matchState);
-      }
-    }, 5000);
-    
-    // 保存定时器以便清理
-    matchState.cancelTimer = cancelTimer;
-  }
-  
-  // 显示取消匹配的Modal
-  showCancelMatchModal(SocketClient, matchState) {
-    // 再次检查状态
-    if (matchState.cancelled || matchState.found) {
-      return;
-    }
-    
+    // 显示一个持续的Modal，只有"取消匹配"按钮
     wx.showModal({
       title: '正在匹配',
-      content: '正在为你寻找对手...\n已等待5秒',
+      content: '正在为你寻找对手...\n请耐心等待',
       showCancel: true,
       cancelText: '取消匹配',
-      confirmText: '继续等待',
+      confirmText: '', // 不显示确认按钮
       success: (res) => {
         // 检查匹配状态（可能在对话框显示期间匹配成功了）
         if (matchState.found) {
           console.log('✅ 匹配已成功，对话框自动关闭');
-          wx.hideLoading();
           return;
         }
         
-        if (!res.confirm) {
-          // 用户点击取消匹配
+        // 用户点击取消匹配（res.cancel为true）或关闭（没有确认按钮）
+        if (res.cancel || !res.confirm) {
           console.log('❌ 用户取消匹配');
           matchState.cancelled = true;
           
-          // 清除定时器
-          if (matchState.cancelTimer) {
-            clearTimeout(matchState.cancelTimer);
-            matchState.cancelTimer = null;
-          }
-          
           SocketClient.cancelMatch();
-          wx.hideLoading();
           wx.showToast({ title: '已取消匹配', icon: 'none' });
-        } else if (!matchState.cancelled && !matchState.found) {
-          // 用户点击继续等待，继续显示Loading，5秒后再次弹出
-          console.log('♻️ 用户选择继续等待');
-          wx.showLoading({
-            title: '正在匹配...',
-            mask: true
-          });
-          
-          const cancelTimer = setTimeout(() => {
-            if (!matchState.found && !matchState.cancelled) {
-              this.showCancelMatchModal(SocketClient, matchState);
-            }
-          }, 5000);
-          
-          matchState.cancelTimer = cancelTimer;
         }
       },
       fail: (err) => {
