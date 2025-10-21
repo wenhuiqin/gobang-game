@@ -122,11 +122,21 @@ class MultiplayerGameScene {
     
     console.log('🔄 已清除旧的事件监听器，准备重新注册');
     
+    // 保存游戏上下文（用于断线重连）
+    SocketClient.saveContext('game', {
+      roomId: this.roomId,
+      myColor: this.myColor,
+      opponent: this.opponent
+    });
+
     // 监听重连成功，请求同步棋盘
-    SocketClient.on('connected', () => {
-      console.log('✅ WebSocket重连成功，请求同步棋盘...');
-      // 请求服务器同步当前房间的棋盘状态
-      SocketClient.send('requestBoardSync', { roomId: this.roomId });
+    SocketClient.on('connected', (data) => {
+      if (data && data.isReconnect) {
+        console.log('✅ WebSocket重连成功，请求同步棋盘...');
+        wx.showToast({ title: '重连成功', icon: 'success', duration: 1000 });
+        // 请求服务器同步当前房间的棋盘状态
+        SocketClient.send('requestBoardSync', { roomId: this.roomId });
+      }
     });
 
     // 监听断线
@@ -196,6 +206,9 @@ class MultiplayerGameScene {
       console.log('🏁 游戏结束:', data);
       console.log('🔍 我的userId:', this.userId);
       console.log('🔍 获胜者userId:', data.winner);
+      
+      // 清除游戏上下文
+      SocketClient.clearContext();
       
       const { winner, reason } = data;
       
@@ -436,6 +449,10 @@ class MultiplayerGameScene {
    * 返回菜单
    */
   returnToMenu() {
+    // 清除游戏上下文
+    const SocketClient = require('../api/SocketClient.js');
+    SocketClient.clearContext();
+    
     const SceneManager = require('../utils/SceneManager.js');
     SceneManager.switchScene('menu');
   }

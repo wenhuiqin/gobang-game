@@ -14,6 +14,7 @@ class SocketClient {
     this.maxReconnectAttempts = 5;
     this.reconnectDelay = 3000; // 3秒
     this.shouldReconnect = false; // 是否应该自动重连
+    this.reconnectContext = null; // 保存断线前的上下文（匹配、游戏等）
   }
 
   /**
@@ -58,8 +59,16 @@ class SocketClient {
     socketTask.onOpen(() => {
       console.log('✅ Socket已打开');
       this.connected = true;
+      const isReconnect = this.reconnectAttempts > 0;
       this.reconnectAttempts = 0; // 重置重连计数
-      this.emit('connected');
+      
+      this.emit('connected', { isReconnect });
+      
+      // 如果是重连，尝试恢复之前的状态
+      if (isReconnect && this.reconnectContext) {
+        console.log('🔄 重连成功，恢复上下文:', this.reconnectContext);
+        this.restoreContext();
+      }
     });
 
     // 监听消息
@@ -99,6 +108,57 @@ class SocketClient {
   }
 
   /**
+   * 保存当前上下文（用于断线重连）
+   */
+  saveContext(type, data) {
+    this.reconnectContext = { type, data, timestamp: Date.now() };
+    console.log('💾 保存重连上下文:', this.reconnectContext);
+  }
+
+  /**
+   * 清除上下文
+   */
+  clearContext() {
+    this.reconnectContext = null;
+  }
+
+  /**
+   * 恢复上下文
+   */
+  restoreContext() {
+    if (!this.reconnectContext) return;
+
+    const { type, data, timestamp } = this.reconnectContext;
+    const elapsed = Date.now() - timestamp;
+
+    // 超过5分钟的上下文认为过期
+    if (elapsed > 5 * 60 * 1000) {
+      console.log('⚠️ 上下文已过期，不恢复');
+      this.clearContext();
+      return;
+    }
+
+    console.log(`🔄 恢复上下文: ${type}`, data);
+
+    switch (type) {
+      case 'matching':
+        // 重新加入匹配队列
+        wx.showToast({ title: '重新匹配中...', icon: 'loading' });
+        this.joinMatch(data.rating);
+        break;
+      
+      case 'game':
+        // 重新同步游戏状态
+        wx.showToast({ title: '恢复游戏中...', icon: 'loading' });
+        this.emit('reconnected', data);
+        break;
+      
+      default:
+        console.log('⚠️ 未知的上下文类型:', type);
+    }
+  }
+
+  /**
    * 处理重连
    */
   handleReconnect() {
@@ -109,6 +169,7 @@ class SocketClient {
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('❌ 达到最大重连次数，停止重连');
+      this.clearContext();
       wx.showToast({
         title: '连接失败，请重新进入',
         icon: 'none',
@@ -118,7 +179,14 @@ class SocketClient {
     }
 
     this.reconnectAttempts++;
-    console.log(`⏳ ${this.reconnectDelay / 1000}秒后尝试重连...`);
+    console.log(`⏳ ${this.reconnectDelay / 1000}秒后尝试重连 (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+    
+    // 显示重连提示
+    wx.showToast({
+      title: `重连中(${this.reconnectAttempts}/${this.maxReconnectAttempts})...`,
+      icon: 'loading',
+      duration: this.reconnectDelay
+    });
 
     this.reconnectTimer = setTimeout(() => {
       if (this.userId && !this.connected) {

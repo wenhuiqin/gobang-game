@@ -232,6 +232,9 @@ class MenuScene {
       SocketClient.off('matchError', onMatchError);
       SocketClient.off('matchCancelled', onMatchCancelled);
       
+      // 清除匹配上下文
+      SocketClient.clearContext();
+      
       // 清除定时器
       if (matchState.showCancelTimer) {
         clearTimeout(matchState.showCancelTimer);
@@ -298,8 +301,11 @@ class MenuScene {
     SocketClient.on('matchError', onMatchError);
     SocketClient.on('matchCancelled', onMatchCancelled);
     
-    // 发起匹配请求
+    // 保存匹配上下文（用于断线重连）
     const rating = this.userInfo.rating || 1000;
+    SocketClient.saveContext('matching', { rating });
+    
+    // 发起匹配请求
     console.log(`📤 发送joinMatch请求: userId=${this.userInfo.id}, rating=${rating}`);
     SocketClient.joinMatch(rating);
   }
@@ -357,6 +363,9 @@ class MenuScene {
           if (matchState.showCancelTimer) {
             clearTimeout(matchState.showCancelTimer);
           }
+          
+          // 清除匹配上下文
+          SocketClient.clearContext();
           
           SocketClient.cancelMatch();
           wx.showToast({ title: '已取消匹配', icon: 'none' });
