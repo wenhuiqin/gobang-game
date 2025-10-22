@@ -193,6 +193,11 @@ class MultiplayerGameScene {
       this.currentPlayer = nextPlayer;
       this.lastMove = { x, y };
       
+      // 播放对手下棋音效（如果不是自己的棋）
+      if (color !== this.myColor) {
+        this.playPlacePieceSound();
+      }
+      
       console.log(`📥 棋盘已更新: (${x}, ${y}) = ${color}, 下一玩家: ${nextPlayer}`);
       
       // 检查胜负
@@ -384,10 +389,6 @@ class MultiplayerGameScene {
         // 第二次点击同一位置，确认下棋
         console.log(`✅ 确认下棋: (${row}, ${col})`);
         this.previewPosition = null; // 清除预览
-        
-        // 播放下棋音效
-        this.playPlacePieceSound();
-        
         this.placePiece(row, col);
       } else {
         // 第一次点击或点击不同位置，显示预览
@@ -416,6 +417,9 @@ class MultiplayerGameScene {
     this.board[x][y] = this.myColor;
     this.lastMove = { x, y };
     this.currentPlayer = this.myColor === Config.PIECE.BLACK ? Config.PIECE.WHITE : Config.PIECE.BLACK;
+    
+    // 播放下棋音效
+    this.playPlacePieceSound();
     
     console.log(`🎨 本地棋盘已更新: board[${x}][${y}] = ${this.myColor}, 下一玩家: ${this.currentPlayer}`);
 

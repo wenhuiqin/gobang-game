@@ -143,10 +143,6 @@ class GameScene {
         // 第二次点击同一位置，确认下棋
         console.log(`✅ 确认下棋: (${pos.x}, ${pos.y})`);
         this.previewPosition = null; // 清除预览
-        
-        // 播放下棋音效
-        this.playPlacePieceSound();
-        
         this.placePiece(pos.x, pos.y);
       } else {
         // 第一次点击或点击不同位置，显示预览
@@ -180,6 +176,9 @@ class GameScene {
     
     this.board[x][y] = this.currentPlayer;
     this.lastMove = { x, y };
+    
+    // 播放下棋音效
+    this.playPlacePieceSound();
     
     console.log(`✅ ${this.currentPlayer === Config.PIECE.BLACK ? '黑方' : '白方'}下棋: (${x}, ${y})`);
     
