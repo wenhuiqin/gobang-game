@@ -119,6 +119,8 @@ class MultiplayerGameScene {
     SocketClient.off('boardSync');
     SocketClient.off('disconnected');
     SocketClient.off('connected');
+    SocketClient.off('restartGameRequest');
+    SocketClient.off('gameRestarted');
     
     console.log('🔄 已清除旧的事件监听器，准备重新注册');
     
@@ -602,6 +604,9 @@ class MultiplayerGameScene {
     
     // 重新渲染
     this.render();
+    
+    // 先隐藏可能存在的loading toast
+    wx.hideToast();
     
     wx.showToast({
       title: '游戏已重置',
