@@ -93,10 +93,18 @@ class MultiplayerGameScene {
    * 游戏循环
    */
   gameLoop() {
-    if (!this.running) return;
+    // ⚠️ 关键：立即检查running状态
+    if (!this.running) {
+      console.log('⏹️ gameLoop已停止');
+      return;
+    }
     
     this.render();
-    requestAnimationFrame(() => this.gameLoop());
+    requestAnimationFrame(() => {
+      if (this.running) {  // 再次检查
+        this.gameLoop();
+      }
+    });
   }
 
   /**

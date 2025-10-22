@@ -745,8 +745,11 @@ export class WebSocketService implements OnModuleInit {
         startedAt,
       );
       
-      // 删除Redis中的房间数据
-      await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
+      // ⚠️ 不立即删除房间，保留10分钟供"再来一局"使用
+      // await this.redisService.del(REDIS_KEYS.GAME_ROOM(roomId));
+      // 设置房间10分钟后过期
+      await this.redisService.expire(REDIS_KEYS.GAME_ROOM(roomId), 600);
+      this.logger.log(`✅ 房间已设置10分钟后过期，可用于再来一局`);
     } catch (error) {
       this.logger.error(`❌ 保存游戏记录失败:`, error);
     }
