@@ -264,13 +264,18 @@ class SocketClient {
    */
   off(event, callback) {
     if (!this.listeners[event]) {
+      console.log(`📭 取消监听: ${event} (监听器不存在)`);
       return;
     }
     
+    const beforeCount = this.listeners[event].length;
+    
     if (callback) {
       this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+      console.log(`📭 取消监听: ${event} (${beforeCount} → ${this.listeners[event].length})`);
     } else {
       delete this.listeners[event];
+      console.log(`📭 取消监听: ${event} (删除所有${beforeCount}个监听器)`);
     }
   }
 
@@ -282,11 +287,18 @@ class SocketClient {
       return;
     }
     
-    this.listeners[event].forEach(callback => {
+    const count = this.listeners[event].length;
+    if (count > 1 && event === 'gameOver') {
+      console.warn(`⚠️ 触发事件: ${event} (有${count}个监听器!)`);
+    } else {
+      console.log(`📢 触发事件: ${event} (${count}个监听器)`);
+    }
+    
+    this.listeners[event].forEach((callback, index) => {
       try {
         callback(data);
       } catch (err) {
-        console.error(`❌ 事件处理错误 [${event}]:`, err);
+        console.error(`❌ 事件处理错误 [${event}][监听器${index}]:`, err);
       }
     });
   }

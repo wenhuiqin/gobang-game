@@ -46,7 +46,19 @@ class SceneTracker {
     // ⚠️ 先清空数组，避免destroy中的unregister操作
     this.scenes = [];
     
-    // 手动清理每个场景（不调用destroy方法，避免循环调用）
+    // ⚠️ 关键：先清除所有WebSocket监听器（只清除一次，不在循环内）
+    const SocketClient = require('../api/SocketClient.js');
+    console.log(`  🧹 [SceneTracker] 清除所有WebSocket监听器`);
+    SocketClient.off('moveMade');
+    SocketClient.off('gameOver');
+    SocketClient.off('error');
+    SocketClient.off('boardSync');
+    SocketClient.off('disconnected');
+    SocketClient.off('connected');
+    SocketClient.off('restartGameRequest');
+    SocketClient.off('gameRestarted');
+    
+    // 手动清理每个场景
     scenesToDestroy.forEach((scene) => {
       if (!scene.destroyed) {
         console.log(`  🧹 [SceneTracker] 销毁场景: ${scene.sceneId}`);
@@ -60,23 +72,10 @@ class SceneTracker {
           cancelAnimationFrame(scene.rafId);
           scene.rafId = null;
         }
-        
-        // ⚠️ 关键：手动清除WebSocket监听器
-        const SocketClient = require('../api/SocketClient.js');
-        SocketClient.off('moveMade');
-        SocketClient.off('gameOver');
-        SocketClient.off('error');
-        SocketClient.off('boardSync');
-        SocketClient.off('disconnected');
-        SocketClient.off('connected');
-        SocketClient.off('restartGameRequest');
-        SocketClient.off('gameRestarted');
-        
-        console.log(`    ✅ 已清除场景 ${scene.sceneId} 的所有监听器`);
       }
     });
     
-    console.log(`✅ [SceneTracker] 所有场景已销毁`);
+    console.log(`✅ [SceneTracker] 所有场景已销毁，已清除所有监听器`);
   }
 
   /**
