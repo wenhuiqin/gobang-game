@@ -73,6 +73,10 @@ class MultiplayerGameScene {
     // 防止重复初始化
     this.socketInitialized = false;
     
+    // 生成唯一场景ID用于追踪
+    this.sceneId = `scene_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    console.log(`🆔 创建场景实例: ${this.sceneId}`);
+    
     this.bindEvents();
     this.setupWebSocket();
     
@@ -86,6 +90,8 @@ class MultiplayerGameScene {
     
     // 启动游戏循环
     this.running = true;
+    this.rafId = null; // 用于存储requestAnimationFrame的ID
+    console.log(`▶️ 启动gameLoop: ${this.sceneId}`);
     this.gameLoop();
   }
   
@@ -95,14 +101,16 @@ class MultiplayerGameScene {
   gameLoop() {
     // ⚠️ 关键：立即检查running状态
     if (!this.running) {
-      console.log('⏹️ gameLoop已停止');
+      console.log(`⏹️ gameLoop已停止: ${this.sceneId}`);
       return;
     }
     
     this.render();
-    requestAnimationFrame(() => {
+    this.rafId = requestAnimationFrame(() => {
       if (this.running) {  // 再次检查
         this.gameLoop();
+      } else {
+        console.log(`⏹️ gameLoop停止（RAF中）: ${this.sceneId}`);
       }
     });
   }
@@ -624,6 +632,13 @@ class MultiplayerGameScene {
   resetBoard() {
     console.log('🔄 重置棋盘');
     
+    // ⚠️ 强制关闭所有可能的弹窗
+    wx.hideLoading();
+    wx.hideToast();
+    // Modal没有hide方法，用loading覆盖然后立即关闭
+    wx.showLoading({ title: '重置中...' });
+    setTimeout(() => wx.hideLoading(), 100);
+    
     // 重置棋盘状态
     this.board = Array(Config.BOARD_SIZE).fill(null).map(() => Array(Config.BOARD_SIZE).fill(0));
     this.currentPlayer = Config.PIECE.BLACK;
@@ -635,9 +650,6 @@ class MultiplayerGameScene {
     
     // 重新渲染
     this.render();
-    
-    // 先隐藏可能存在的loading toast
-    wx.hideToast();
     
     wx.showToast({
       title: '游戏已重置',
@@ -1185,8 +1197,20 @@ class MultiplayerGameScene {
    * 销毁场景
    */
   destroy() {
-    console.log('🗑️ 多人对战场景销毁中...');
+    console.log(`🗑️ 多人对战场景销毁中: ${this.sceneId}`);
+    console.log(`  当前running状态: ${this.running}`);
+    console.log(`  当前rafId: ${this.rafId}`);
+    
     this.running = false; // 停止游戏循环
+    console.log(`  ✅ 已设置running = false`);
+    
+    // ⚠️ 关键：取消requestAnimationFrame
+    if (this.rafId) {
+      cancelAnimationFrame(this.rafId);
+      console.log(`  ✅ 已取消RAF: ${this.rafId}`);
+      this.rafId = null;
+    }
+    
     wx.offTouchStart(this.touchHandler);
     
     // 清除所有WebSocket监听器
@@ -1199,7 +1223,7 @@ class MultiplayerGameScene {
     SocketClient.off('restartGameRequest');
     SocketClient.off('gameRestarted');
     
-    console.log('✅ 多人对战场景已销毁');
+    console.log(`✅ 多人对战场景已销毁: ${this.sceneId}`);
   }
 }
 
