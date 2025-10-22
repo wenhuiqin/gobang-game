@@ -5,6 +5,11 @@ const SocketClient = require('../api/SocketClient.js');
 /**
  * 双人对战场景
  */
+// 全局场景追踪
+if (!global.activeMultiplayerScenes) {
+  global.activeMultiplayerScenes = [];
+}
+
 class MultiplayerGameScene {
   constructor(canvas, ctx, config) {
     // ⚠️ 立即清除所有可能残留的监听器（防止累积）
@@ -75,7 +80,26 @@ class MultiplayerGameScene {
     
     // 生成唯一场景ID用于追踪
     this.sceneId = `scene_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    this.destroyed = false; // 标记是否已销毁
+    
+    // ⚠️ 在创建新场景前，强制销毁所有旧场景
     console.log(`🆔 创建场景实例: ${this.sceneId}`);
+    console.log(`📊 销毁前活跃场景数量: ${global.activeMultiplayerScenes.length}`);
+    
+    // 销毁所有旧场景
+    global.activeMultiplayerScenes.forEach((oldScene) => {
+      console.log(`  🧹 销毁旧场景: ${oldScene.sceneId}`);
+      oldScene.destroyed = true;
+      oldScene.running = false;
+      if (oldScene.rafId) {
+        cancelAnimationFrame(oldScene.rafId);
+      }
+    });
+    global.activeMultiplayerScenes = [];
+    
+    // 注册当前场景
+    global.activeMultiplayerScenes.push(this);
+    console.log(`📊 销毁后活跃场景数量: ${global.activeMultiplayerScenes.length}`);
     
     this.bindEvents();
     this.setupWebSocket();
@@ -99,18 +123,18 @@ class MultiplayerGameScene {
    * 游戏循环
    */
   gameLoop() {
-    // ⚠️ 关键：立即检查running状态
-    if (!this.running) {
-      console.log(`⏹️ gameLoop已停止: ${this.sceneId}`);
+    // ⚠️ 关键：立即检查running和destroyed状态
+    if (!this.running || this.destroyed) {
+      console.log(`⏹️ gameLoop已停止: ${this.sceneId} (running=${this.running}, destroyed=${this.destroyed})`);
       return;
     }
     
     this.render();
     this.rafId = requestAnimationFrame(() => {
-      if (this.running) {  // 再次检查
+      if (this.running && !this.destroyed) {  // 再次检查
         this.gameLoop();
       } else {
-        console.log(`⏹️ gameLoop停止（RAF中）: ${this.sceneId}`);
+        console.log(`⏹️ gameLoop停止（RAF中）: ${this.sceneId} (running=${this.running}, destroyed=${this.destroyed})`);
       }
     });
   }
@@ -338,19 +362,26 @@ class MultiplayerGameScene {
     SocketClient.on('gameRestarted', (data) => {
       console.log('✅ 游戏已重新开始:', data);
       
+      // ⚠️ 强制关闭所有弹窗（包括Modal）
+      wx.hideLoading();
       wx.hideToast();
-      
-      if (data.accepted) {
-        // 对方同意，重置棋盘
-        this.resetBoard();
-      } else {
-        // 对方拒绝
-        wx.showToast({
-          title: '对方拒绝了',
-          icon: 'none',
-          duration: 2000
-        });
-      }
+      // 用loading短暂覆盖Modal，然后关闭
+      wx.showLoading({ title: '准备中', mask: true });
+      setTimeout(() => {
+        wx.hideLoading();
+        
+        if (data.accepted) {
+          // 对方同意，重置棋盘
+          this.resetBoard();
+        } else {
+          // 对方拒绝
+          wx.showToast({
+            title: '对方拒绝了',
+            icon: 'none',
+            duration: 2000
+          });
+        }
+      }, 200);
     });
 
     // 监听错误
@@ -1197,12 +1228,18 @@ class MultiplayerGameScene {
    * 销毁场景
    */
   destroy() {
+    if (this.destroyed) {
+      console.warn(`⚠️ 场景已销毁，跳过: ${this.sceneId}`);
+      return;
+    }
+    
     console.log(`🗑️ 多人对战场景销毁中: ${this.sceneId}`);
     console.log(`  当前running状态: ${this.running}`);
     console.log(`  当前rafId: ${this.rafId}`);
     
+    this.destroyed = true; // 标记为已销毁
     this.running = false; // 停止游戏循环
-    console.log(`  ✅ 已设置running = false`);
+    console.log(`  ✅ 已设置destroyed = true, running = false`);
     
     // ⚠️ 关键：取消requestAnimationFrame
     if (this.rafId) {
@@ -1222,6 +1259,26 @@ class MultiplayerGameScene {
     SocketClient.off('connected');
     SocketClient.off('restartGameRequest');
     SocketClient.off('gameRestarted');
+    
+    // 从全局追踪中移除
+    const index = global.activeMultiplayerScenes.indexOf(this);
+    if (index > -1) {
+      global.activeMultiplayerScenes.splice(index, 1);
+      console.log(`  ✅ 已从全局追踪中移除`);
+    }
+    console.log(`📊 剩余活跃场景数量: ${global.activeMultiplayerScenes.length}`);
+    
+    // ⚠️ 终极手段：销毁所有旧场景
+    if (global.activeMultiplayerScenes.length > 1) {
+      console.warn(`⚠️ 检测到多个场景，强制销毁所有旧场景`);
+      const scenesToDestroy = global.activeMultiplayerScenes.filter(s => s !== this && !s.destroyed);
+      scenesToDestroy.forEach(s => {
+        console.log(`  🧹 强制销毁旧场景: ${s.sceneId}`);
+        s.destroyed = true;
+        s.running = false;
+        if (s.rafId) cancelAnimationFrame(s.rafId);
+      });
+    }
     
     console.log(`✅ 多人对战场景已销毁: ${this.sceneId}`);
   }
