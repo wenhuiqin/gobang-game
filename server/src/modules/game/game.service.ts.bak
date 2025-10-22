@@ -355,7 +355,7 @@ export class GameService {
     // 保存游戏记录
     const gameRecord = this.gameRecordRepository.create({
       roomId,
-      gameType: GameType.RANDOM_MATCH,  // 在线匹配
+      gameType: GameType.ONLINE_MATCH,  // 在线匹配
       blackPlayerId: player1Id,  // player1固定是黑方
       whitePlayerId: player2Id,  // player2固定是白方
       winnerId,
