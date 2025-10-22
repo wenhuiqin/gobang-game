@@ -242,13 +242,21 @@ class SocketClient {
   }
 
   /**
-   * 监听事件
+   * 监听事件（防止重复添加同一个callback）
    */
   on(event, callback) {
     if (!this.listeners[event]) {
       this.listeners[event] = [];
     }
-    this.listeners[event].push(callback);
+    
+    // ⚠️ 防止重复添加同一个callback（引起监听器累积bug）
+    const exists = this.listeners[event].includes(callback);
+    if (!exists) {
+      this.listeners[event].push(callback);
+      console.log(`✅ 注册监听器: ${event} (共${this.listeners[event].length}个)`);
+    } else {
+      console.warn(`⚠️ 监听器已存在，跳过: ${event}`);
+    }
   }
 
   /**

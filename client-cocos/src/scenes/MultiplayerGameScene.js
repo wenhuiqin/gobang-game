@@ -70,6 +70,9 @@ class MultiplayerGameScene {
     console.log('  对手信息:', this.opponent);
     console.log('  我的信息:', this.userInfo);
 
+    // 防止重复初始化
+    this.socketInitialized = false;
+    
     this.bindEvents();
     this.setupWebSocket();
     
@@ -119,6 +122,14 @@ class MultiplayerGameScene {
    * 设置WebSocket监听
    */
   setupWebSocket() {
+    // ⚠️ 防止重复初始化（关键修复）
+    if (this.socketInitialized) {
+      console.warn('⚠️ setupWebSocket已初始化，跳过重复注册');
+      return;
+    }
+    this.socketInitialized = true;
+    console.log('🔄 首次初始化WebSocket监听器');
+    
     // 确保已连接WebSocket
     if (!SocketClient.connected) {
       SocketClient.connect(this.config.userId, true); // 启用自动重连
