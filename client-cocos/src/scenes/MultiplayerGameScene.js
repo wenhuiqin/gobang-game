@@ -1,28 +1,14 @@
 const Config = require('../utils/Config.js');
 const CanvasHelper = require('../utils/CanvasHelper.js');
 const SocketClient = require('../api/SocketClient.js');
+const SceneTracker = require('../utils/SceneTracker.js');
 
 /**
  * 双人对战场景
  */
-// 全局场景追踪
-if (!global.activeMultiplayerScenes) {
-  global.activeMultiplayerScenes = [];
-}
-
 class MultiplayerGameScene {
   constructor(canvas, ctx, config) {
-    // ⚠️ 立即清除所有可能残留的监听器（防止累积）
-    const SocketClient = require('../api/SocketClient.js');
-    SocketClient.off('moveMade');
-    SocketClient.off('gameOver');
-    SocketClient.off('error');
-    SocketClient.off('boardSync');
-    SocketClient.off('disconnected');
-    SocketClient.off('connected');
-    SocketClient.off('restartGameRequest');
-    SocketClient.off('gameRestarted');
-    console.log('🧹 构造函数：已清除所有残留监听器');
+    // ⚠️ 注意：不在这里清除监听器，由SceneTracker统一管理
     
     this.canvas = canvas;
     this.ctx = ctx;
@@ -84,22 +70,10 @@ class MultiplayerGameScene {
     
     // ⚠️ 在创建新场景前，强制销毁所有旧场景
     console.log(`🆔 创建场景实例: ${this.sceneId}`);
-    console.log(`📊 销毁前活跃场景数量: ${global.activeMultiplayerScenes.length}`);
-    
-    // 销毁所有旧场景
-    global.activeMultiplayerScenes.forEach((oldScene) => {
-      console.log(`  🧹 销毁旧场景: ${oldScene.sceneId}`);
-      oldScene.destroyed = true;
-      oldScene.running = false;
-      if (oldScene.rafId) {
-        cancelAnimationFrame(oldScene.rafId);
-      }
-    });
-    global.activeMultiplayerScenes = [];
+    SceneTracker.destroyAll();
     
     // 注册当前场景
-    global.activeMultiplayerScenes.push(this);
-    console.log(`📊 销毁后活跃场景数量: ${global.activeMultiplayerScenes.length}`);
+    SceneTracker.register(this);
     
     this.bindEvents();
     this.setupWebSocket();
@@ -175,17 +149,8 @@ class MultiplayerGameScene {
       SocketClient.connect(this.config.userId, true); // 启用自动重连
     }
     
-    // 清除旧的监听器（使用不带回调的方式清除所有监听器）
-    SocketClient.off('moveMade');
-    SocketClient.off('gameOver');
-    SocketClient.off('error');
-    SocketClient.off('boardSync');
-    SocketClient.off('disconnected');
-    SocketClient.off('connected');
-    SocketClient.off('restartGameRequest');
-    SocketClient.off('gameRestarted');
-    
-    console.log('🔄 已清除旧的事件监听器，准备重新注册');
+    // ⚠️ 注意：监听器已在SceneTracker.destroyAll()中清除，这里不再清除
+    console.log('🔄 开始注册事件监听器');
     
     // 保存游戏上下文（用于断线重连）
     SocketClient.saveContext('game', {
@@ -1260,25 +1225,8 @@ class MultiplayerGameScene {
     SocketClient.off('restartGameRequest');
     SocketClient.off('gameRestarted');
     
-    // 从全局追踪中移除
-    const index = global.activeMultiplayerScenes.indexOf(this);
-    if (index > -1) {
-      global.activeMultiplayerScenes.splice(index, 1);
-      console.log(`  ✅ 已从全局追踪中移除`);
-    }
-    console.log(`📊 剩余活跃场景数量: ${global.activeMultiplayerScenes.length}`);
-    
-    // ⚠️ 终极手段：销毁所有旧场景
-    if (global.activeMultiplayerScenes.length > 1) {
-      console.warn(`⚠️ 检测到多个场景，强制销毁所有旧场景`);
-      const scenesToDestroy = global.activeMultiplayerScenes.filter(s => s !== this && !s.destroyed);
-      scenesToDestroy.forEach(s => {
-        console.log(`  🧹 强制销毁旧场景: ${s.sceneId}`);
-        s.destroyed = true;
-        s.running = false;
-        if (s.rafId) cancelAnimationFrame(s.rafId);
-      });
-    }
+    // 从场景追踪器中注销
+    SceneTracker.unregister(this);
     
     console.log(`✅ 多人对战场景已销毁: ${this.sceneId}`);
   }

@@ -1,6 +1,6 @@
 {
   "name": "gobang-wechat-game",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "传统五子棋大挑战",
   "scripts": {
     "upload": "node scripts/upload.js"
