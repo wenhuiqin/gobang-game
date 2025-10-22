@@ -512,18 +512,46 @@ class MultiplayerGameScene {
     const isRandomMatch = this.roomId.startsWith('match_');
     
     if (isRandomMatch) {
-      // 随机匹配：清除上下文，回到菜单并自动开始新的匹配
-      console.log('🔄 随机匹配模式，回到菜单并自动重新匹配');
-      SocketClient.clearContext();
-      SceneManager.switchScene('menu');
+      // 随机匹配：提供两个选项
+      console.log('🎮 随机匹配模式，询问用户选择');
       
-      // 延迟一点让场景切换完成，然后自动触发匹配
-      setTimeout(() => {
-        const menuScene = SceneManager.instance.currentScene;
-        if (menuScene && menuScene.startRandomMatch) {
-          menuScene.startRandomMatch();
+      wx.showActionSheet({
+        itemList: ['💪 与TA再战一局', '🔄 重新匹配新对手'],
+        success: (res) => {
+          if (res.tapIndex === 0) {
+            // 与当前对手再来一局
+            console.log('👥 与当前对手再来一局');
+            
+            // 发送重新开始请求到服务器
+            SocketClient.send('restartGame', {
+              roomId: this.roomId,
+              userId: this.userId
+            });
+            
+            // 重置本地棋盘
+            this.resetBoard();
+            
+            wx.showToast({
+              title: '等待对方确认...',
+              icon: 'loading',
+              duration: 3000
+            });
+          } else if (res.tapIndex === 1) {
+            // 重新匹配：清除上下文，回到菜单并自动开始新的匹配
+            console.log('🔄 重新匹配，回到菜单');
+            SocketClient.clearContext();
+            SceneManager.switchScene('menu');
+            
+            // 延迟一点让场景切换完成，然后自动触发匹配
+            setTimeout(() => {
+              const menuScene = SceneManager.instance.currentScene;
+              if (menuScene && menuScene.startRandomMatch) {
+                menuScene.startRandomMatch();
+              }
+            }, 500);
+          }
         }
-      }, 500);
+      });
     } else {
       // 好友对战：保留房间，重置棋盘
       console.log('👥 好友对战模式，重置棋盘继续在同一房间');
