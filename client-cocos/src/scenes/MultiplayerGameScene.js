@@ -7,6 +7,18 @@ const SocketClient = require('../api/SocketClient.js');
  */
 class MultiplayerGameScene {
   constructor(canvas, ctx, config) {
+    // ⚠️ 立即清除所有可能残留的监听器（防止累积）
+    const SocketClient = require('../api/SocketClient.js');
+    SocketClient.off('moveMade');
+    SocketClient.off('gameOver');
+    SocketClient.off('error');
+    SocketClient.off('boardSync');
+    SocketClient.off('disconnected');
+    SocketClient.off('connected');
+    SocketClient.off('restartGameRequest');
+    SocketClient.off('gameRestarted');
+    console.log('🧹 构造函数：已清除所有残留监听器');
+    
     this.canvas = canvas;
     this.ctx = ctx;
     this.config = config; // { mode: 'multiplayer', roomId, myColor, opponentId, opponent }
