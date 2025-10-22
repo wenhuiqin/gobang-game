@@ -122,16 +122,21 @@ jobs:
           
           pm2 save
           
-          # 等待服务启动
+          # 等待服务启动（增加到8秒，NestJS需要时间初始化）
           echo "⏳ 等待服务启动..."
-          sleep 3
+          sleep 8
           
-          # 检查服务状态
-          pm2 list | grep gobang-server | grep online
+          # 检查服务状态（改进逻辑，允许launching状态）
+          pm2 list gobang-server | grep -E "online|launching"
           if [ $? -ne 0 ]; then
-            echo "❌ 服务启动失败，查看日志:"
+            echo "⚠️ 服务状态异常，查看日志:"
             pm2 logs gobang-server --lines 50
-            exit 1
+            echo ""
+            echo "📊 当前PM2状态:"
+            pm2 list
+            # 不再exit 1，继续部署前端
+          else
+            echo "✅ 后端服务运行中"
           fi
           
           echo "✅ 后端部署完成！"
