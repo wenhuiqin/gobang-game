@@ -836,8 +836,21 @@ export class WebSocketService implements OnModuleInit {
           accepted,
         }
       }));
+    }
 
-      if (accepted) {
+    // 也通知响应方（确认已处理）
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        event: 'gameRestarted',
+        data: {
+          roomId,
+          accepted,
+        }
+      }));
+      this.logger.log(`✅ 已通知响应方: ${userIdStr}`);
+    }
+
+    if (accepted && requesterClient) {
         this.logger.log(`✅ 双方同意重新开始，重置房间: ${roomId}`);
 
         // 重置房间状态

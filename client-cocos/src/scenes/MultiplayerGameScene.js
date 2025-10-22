@@ -270,8 +270,12 @@ class MultiplayerGameScene {
               accepted: true
             });
             
-            // 重置本地棋盘
-            this.resetBoard();
+            // 等待后端确认后再重置（通过gameRestarted事件）
+            wx.showToast({
+              title: '已同意，等待确认...',
+              icon: 'loading',
+              duration: 2000
+            });
           } else {
             // 拒绝重新开始
             SocketClient.send('restartGameResponse', {
@@ -532,9 +536,6 @@ class MultiplayerGameScene {
               userId: this.userId
             });
             
-            // 重置本地棋盘
-            this.resetBoard();
-            
             wx.showToast({
               title: '等待对方确认...',
               icon: 'loading',
@@ -572,9 +573,6 @@ class MultiplayerGameScene {
               roomId: this.roomId,
               userId: this.userId
             });
-            
-            // 重置本地棋盘
-            this.resetBoard();
             
             wx.showToast({
               title: '等待对方确认...',
@@ -1162,6 +1160,8 @@ class MultiplayerGameScene {
     SocketClient.off('boardSync');
     SocketClient.off('disconnected');
     SocketClient.off('connected');
+    SocketClient.off('restartGameRequest');
+    SocketClient.off('gameRestarted');
     
     console.log('✅ 多人对战场景已销毁');
   }
