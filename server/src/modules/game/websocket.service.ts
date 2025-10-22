@@ -850,28 +850,27 @@ export class WebSocketService implements OnModuleInit {
       this.logger.log(`✅ 已通知响应方: ${userIdStr}`);
     }
 
-    if (accepted && requesterClient) {
-        this.logger.log(`✅ 双方同意重新开始，重置房间: ${roomId}`);
+    if (accepted) {
+      this.logger.log(`✅ 双方同意重新开始，重置房间: ${roomId}`);
 
-        // 重置房间状态
-        room.board = Array(15)
-          .fill(null)
-          .map(() => Array(15).fill(0));
-        room.currentPlayer = 1; // 黑方先手
-        room.lastMove = null;
+      // 重置房间状态
+      room.board = Array(15)
+        .fill(null)
+        .map(() => Array(15).fill(0));
+      room.currentPlayer = 1; // 黑方先手
+      room.lastMove = null;
 
-        // 保存重置后的房间
-        await this.redisService.set(
-          REDIS_KEYS.GAME_ROOM(roomId),
-          JSON.stringify(room),
-          3600,
-        );
+      // 保存重置后的房间
+      await this.redisService.set(
+        REDIS_KEYS.GAME_ROOM(roomId),
+        JSON.stringify(room),
+        3600,
+      );
 
-        // 通知双方棋盘已重置（可选，前端已经自己重置了）
-        this.logger.log(`🎮 房间 ${roomId} 已重置`);
-      } else {
-        this.logger.log(`❌ 对手拒绝重新开始: ${roomId}`);
-      }
+      // 通知双方棋盘已重置（可选，前端已经自己重置了）
+      this.logger.log(`🎮 房间 ${roomId} 已重置`);
+    } else {
+      this.logger.log(`❌ 对手拒绝重新开始: ${roomId}`);
     }
   }
 }
