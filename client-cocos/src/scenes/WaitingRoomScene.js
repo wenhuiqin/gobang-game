@@ -223,7 +223,7 @@ class WaitingRoomScene {
    */
   shareRoom() {
     wx.shareAppMessage({
-      title: '传统五子棋大挑战 - 对战邀请',
+      title: '这也太解压了吧 - 对战邀请',
       path: `/game?roomCode=${this.roomCode}`,
       imageUrl: '',
     });

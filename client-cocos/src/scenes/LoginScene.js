@@ -331,7 +331,7 @@ class LoginScene {
     ctx.font = 'bold 44px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('传统五子棋大挑战', this.width / 2, safeTop + 120);
+    ctx.fillText('这也太解压了吧', this.width / 2, safeTop + 120);
     ctx.restore();
     
     // 副标题

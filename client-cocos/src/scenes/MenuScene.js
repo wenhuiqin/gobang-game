@@ -448,7 +448,7 @@ class MenuScene {
   shareRoom(roomCode) {
     // 微信分享（需要用户主动触发）
     wx.shareAppMessage({
-      title: '传统五子棋大挑战 - 对战邀请',
+      title: '这也太解压了吧 - 对战邀请',
       imageUrl: '', // 可以设置分享图片
       query: `roomCode=${roomCode}`, // 关键：传递房间号
       success: () => {
@@ -559,7 +559,7 @@ class MenuScene {
     ctx.font = 'bold 32px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('传统五子棋大挑战', this.width / 2, safeTop + 70);
+    ctx.fillText('这也太解压了吧', this.width / 2, safeTop + 70);
     ctx.restore();
     
     // 用户信息卡片
